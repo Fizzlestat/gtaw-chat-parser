@@ -78,6 +78,15 @@ public class ChatLogTests
     }
 
     [Fact]
+    public void Keywords_can_require_matching_letter_case()
+    {
+        var line = "[14:05:09] JOHN Doe says: Meet me at the bank";
+
+        var matched = ChatLog.FindKeywords(line, ["John", "bank"], caseSensitive: true);
+        Assert.Equal("bank", Assert.Single(matched));
+    }
+
+    [Fact]
     public void Shorter_rewrite_keeps_the_existing_log()
     {
         var startedAt = new DateTime(2026, 1, 3, 8, 0, 0);

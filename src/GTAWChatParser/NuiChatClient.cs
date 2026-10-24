@@ -7,7 +7,7 @@ namespace GTAWChatParser;
 
 internal sealed class NuiChatClient : IDisposable
 {
-    private const string RootUiUrl = "nui://game/ui/root.html";
+    internal const string RootUiUrl = "nui://game/ui/root.html";
     private const string ClientFrameUrl = "https://cfx-nui-client/web/index.html";
 
     private static readonly HttpClient Http = new(new HttpClientHandler { UseProxy = false })

@@ -18,7 +18,7 @@ internal static class Program
 
         if (!acquired)
         {
-            MessageBox.Show("GTAW Chat Parser is already open.", "GTAW Chat Parser", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("GTA: World Chat Parser is already open.", "GTA: World Chat Parser", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 

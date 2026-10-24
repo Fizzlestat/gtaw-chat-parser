@@ -31,8 +31,7 @@ public static class GameProcess
                 try
                 {
                     var name = process.ProcessName;
-                    var client = name.StartsWith("FiveM", StringComparison.OrdinalIgnoreCase)
-                        || name.StartsWith("GTA5", StringComparison.OrdinalIgnoreCase);
+                    var client = IsClientProcessName(name);
                     var game = IsGameProcessName(name);
                     if (client || game)
                         presence = new GamePresence(presence.ClientRunning || client, presence.GameRunning || game);
@@ -72,6 +71,49 @@ public static class GameProcess
         {
             return false;
         }
+    }
+
+    internal static bool IsClientProcessName(string name)
+    {
+        return name.StartsWith("FiveM", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("GTA5", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static HashSet<int> ClientProcessIds()
+    {
+        var ids = new HashSet<int>();
+        Process[] processes;
+        try
+        {
+            processes = Process.GetProcesses();
+        }
+        catch
+        {
+            return ids;
+        }
+
+        try
+        {
+            foreach (var process in processes)
+            {
+                try
+                {
+                    if (IsClientProcessName(process.ProcessName))
+                        ids.Add(process.Id);
+                }
+                catch
+                {
+                    // A process can exit while its name is being read.
+                }
+            }
+        }
+        finally
+        {
+            foreach (var process in processes)
+                process.Dispose();
+        }
+
+        return ids;
     }
 
     private static bool IsGameProcessName(string name)

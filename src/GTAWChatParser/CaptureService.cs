@@ -4,6 +4,7 @@ public sealed class CaptureService : IDisposable
 {
     private static readonly TimeSpan ArchiveInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan CloseGrace = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan PortScanGap = TimeSpan.FromSeconds(3);
 
     private readonly AppConfig _config;
     private readonly object _gate = new();
@@ -11,6 +12,8 @@ public sealed class CaptureService : IDisposable
     private ChatSession? _session;
     private string? _lastSavedPath;
     private bool _disposed;
+    private DateTime _nextPortScan = DateTime.MinValue;
+    private string? _lastStatus;
 
     public CaptureService(AppConfig config)
     {
@@ -220,7 +223,12 @@ public sealed class CaptureService : IDisposable
                     AppLog.Info("Waiting for GTAW chat: " + message);
                 }
 
-                SetStatus(HasSession() ? $"Capturing · {LineCount()} lines" : "Waiting for GTAW chat");
+                var searching = (presence.ClientRunning || presence.GameRunning) && ShouldSearchPort(exception);
+                SetStatus(HasSession()
+                    ? $"Capturing · {LineCount()} lines"
+                    : searching ? "Looking for GTAW chat" : "Waiting for GTAW chat");
+                if (searching)
+                    await SearchForInspectorAsync(cancellationToken).ConfigureAwait(false);
             }
 
             try
@@ -375,8 +383,66 @@ public sealed class CaptureService : IDisposable
             return _session?.Lines.Count ?? 0;
     }
 
+    private async Task SearchForInspectorAsync(CancellationToken cancellationToken)
+    {
+        if (DateTime.UtcNow < _nextPortScan)
+            return;
+
+        _nextPortScan = DateTime.UtcNow.Add(PortScanGap);
+        int found;
+        try
+        {
+            var port = await InspectorLocator.FindAsync(_config.ResolvedDevtoolsPort, cancellationToken).ConfigureAwait(false);
+            if (port == null)
+                return;
+            found = port.Value;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Inspector search failed.", exception);
+            return;
+        }
+
+        if (found == _config.ResolvedDevtoolsPort)
+            return;
+
+        _config.DevtoolsPort = found;
+        try
+        {
+            _config.Save();
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Could not store the inspector port.", exception);
+        }
+
+        _reader.Reset();
+        AppLog.Info($"Using FiveM inspector port {found}.");
+    }
+
+    private static bool ShouldSearchPort(Exception exception)
+    {
+        var message = exception.Message;
+        if (message.Contains("still loading", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (message.Contains("rejected the read", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (message.Contains("context is unavailable", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return true;
+    }
+
     private void SetStatus(string status)
     {
+        if (string.Equals(status, _lastStatus, StringComparison.Ordinal))
+            return;
+
+        _lastStatus = status;
         try
         {
             StatusChanged?.Invoke(status);

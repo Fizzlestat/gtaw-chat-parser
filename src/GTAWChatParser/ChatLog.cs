@@ -105,8 +105,9 @@ public static class ChatLog
         return 0;
     }
 
-    public static IReadOnlyList<string> FindKeywords(string formattedLine, IEnumerable<string> keywords)
+    public static IReadOnlyList<string> FindKeywords(string formattedLine, IEnumerable<string> keywords, bool caseSensitive = false)
     {
+        var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         var body = TimestampPrefix.Replace(formattedLine, string.Empty);
         var found = new List<string>();
         foreach (var keyword in keywords)
@@ -115,8 +116,8 @@ public static class ChatLog
             if (trimmed.Length == 0)
                 continue;
 
-            if (body.Contains(trimmed, StringComparison.OrdinalIgnoreCase) &&
-                found.All(existing => !string.Equals(existing, trimmed, StringComparison.OrdinalIgnoreCase)))
+            if (body.Contains(trimmed, comparison) &&
+                found.All(existing => !string.Equals(existing, trimmed, comparison)))
             {
                 found.Add(trimmed);
             }
