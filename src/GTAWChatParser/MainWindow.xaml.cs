@@ -55,6 +55,8 @@ public partial class MainWindow : Window
 
         HudPalette.Apply(_config);
         InitializeComponent();
+        VersionText.Text = AppUpdate.DisplayVersion;
+        Title = "GTA: World Chat Parser " + AppUpdate.DisplayVersion;
         Icon = AppIcon.Image;
         ChatList.ItemsSource = _lines;
 
@@ -812,7 +814,7 @@ public partial class MainWindow : Window
                 if (_closing)
                     return;
 
-                AppUpdate.BeginInstall();
+                AppUpdate.BeginInstall(offer.Version);
             }
             catch (OperationCanceledException) when (_closing || _updates.IsCancellationRequested)
             {

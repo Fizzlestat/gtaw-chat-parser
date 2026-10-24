@@ -16,8 +16,15 @@ internal static class AppUpdate
 
     internal static bool IsConfigured => TrySplitRepository(Repository, out _, out _);
 
-    internal static Version Current =>
+    internal static Version Current => Choose(AssemblyVersion, ReadInstalled());
+
+    internal static string DisplayVersion => FormatVersion(Current);
+
+    private static Version AssemblyVersion =>
         Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 0, 0);
+
+    internal static Version Choose(Version assembly, Version? installed) =>
+        installed != null && installed > assembly ? installed : assembly;
 
     internal static bool IsNewer(string? tag, Version current) =>
         TryParseTag(tag, out var remote) && remote > current;
@@ -77,19 +84,23 @@ internal static class AppUpdate
         File.Move(partial, destination, overwrite: true);
     }
 
-    internal static void BeginInstall()
+    internal static void BeginInstall(string releaseVersion)
     {
         var exe = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(exe))
             throw new InvalidOperationException("The parser path could not be found.");
 
         Directory.CreateDirectory(AppPaths.Directory);
+        var pending = Path.Combine(AppPaths.Directory, "installed.version.pending");
+        File.WriteAllText(pending, NormalizeVersionText(releaseVersion), new UTF8Encoding(false));
         var scriptPath = Path.Combine(AppPaths.Directory, "update.cmd");
         var target = exe.Replace("%", "%%");
         var script = string.Join("\r\n",
             "@echo off",
             "chcp 65001 >nul",
             "set \"SOURCE=%LOCALAPPDATA%\\GTAWChatParser\\update.exe\"",
+            "set \"PENDING=%LOCALAPPDATA%\\GTAWChatParser\\installed.version.pending\"",
+            "set \"STAMP=%LOCALAPPDATA%\\GTAWChatParser\\installed.version\"",
             "set \"TARGET=" + target + "\"",
             "set TRIES=0",
             ":wait",
@@ -107,6 +118,7 @@ internal static class AppUpdate
             "  goto copy",
             ")",
             "del /q \"%SOURCE%\"",
+            "if exist \"%PENDING%\" move /y \"%PENDING%\" \"%STAMP%\" >nul",
             "start \"\" \"%TARGET%\"",
             "del \"%~f0\"");
         File.WriteAllText(scriptPath, script, new UTF8Encoding(false));
@@ -160,7 +172,38 @@ internal static class AppUpdate
         if (!text.Contains('.'))
             text += ".0";
 
-        return Version.TryParse(text, out version!);
+        if (!Version.TryParse(text, out var parsed) || parsed == null)
+            return false;
+
+        version = new Version(
+            parsed.Major,
+            parsed.Minor,
+            parsed.Build < 0 ? 0 : parsed.Build,
+            parsed.Revision < 0 ? 0 : parsed.Revision);
+        return true;
+    }
+
+    private static Version? ReadInstalled()
+    {
+        try
+        {
+            var path = Path.Combine(AppPaths.Directory, "installed.version");
+            if (!File.Exists(path))
+                return null;
+
+            return TryParseTag(File.ReadAllText(path).Trim(), out var version) ? version : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static string NormalizeVersionText(string releaseVersion)
+    {
+        var chars = releaseVersion.Where(character => char.IsDigit(character) || character == '.').ToArray();
+        var text = new string(chars).Trim('.');
+        return TryParseTag(text, out var version) ? FormatVersion(version) : text;
     }
 
     private static string? FindAssetUrl(JsonElement root)
