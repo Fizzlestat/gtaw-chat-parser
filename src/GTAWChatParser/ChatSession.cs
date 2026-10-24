@@ -64,18 +64,60 @@ public sealed class ChatSession
             IsDirty = true;
     }
 
-    public void PaintColors(IReadOnlyList<string> coloredTail)
+    public void PaintColors(IReadOnlyList<string> coloredLines)
     {
-        var count = Math.Min(coloredTail.Count, Lines.Count);
-        var start = Lines.Count - count;
-        for (var i = 0; i < count; i++)
+        for (var i = 0; i < Lines.Count && i < DisplayLines.Count; i++)
         {
-            var colored = coloredTail[i];
-            var index = start + i;
-            if (index >= DisplayLines.Count || string.IsNullOrEmpty(colored) || !colored.Contains("^#", StringComparison.Ordinal))
+            if (DisplayLines[i].Contains("^#", StringComparison.Ordinal) && IsOtherMessage(Lines[i], DisplayLines[i]))
+                DisplayLines[i] = Lines[i];
+        }
+
+        var visible = 0;
+        for (var i = 0; i < Lines.Count && visible < coloredLines.Count; i++)
+        {
+            if (!SameMessage(Lines[i], coloredLines[visible]))
                 continue;
 
-            DisplayLines[index] = colored;
+            var colored = coloredLines[visible++];
+            if (i >= DisplayLines.Count || string.IsNullOrEmpty(colored) || !colored.Contains("^#", StringComparison.Ordinal))
+                continue;
+
+            DisplayLines[i] = colored;
+        }
+    }
+
+    private static bool SameMessage(string plain, string colored)
+    {
+        return string.Equals(plain, ChatLog.StripColorCodes(colored).Trim(), StringComparison.Ordinal);
+    }
+
+    private static bool IsOtherMessage(string plain, string colored)
+    {
+        var stripped = ChatLog.StripColorCodes(colored).Trim();
+        if (string.Equals(plain, stripped, StringComparison.Ordinal))
+            return false;
+
+        LogLines.Split(plain, out var plainTime, out _);
+        LogLines.Split(stripped, out var coloredTime, out _);
+        if (plainTime != null && coloredTime != null)
+            return plainTime.Value != coloredTime.Value;
+
+        return true;
+    }
+
+    public void PaintMatch(string plain, string colored)
+    {
+        if (string.IsNullOrEmpty(colored) || !colored.Contains("^#", StringComparison.Ordinal))
+            return;
+
+        for (var i = Lines.Count - 1; i >= 0; i--)
+        {
+            if (!LogLines.Same(Lines[i], plain))
+                continue;
+
+            if (i < DisplayLines.Count)
+                DisplayLines[i] = colored;
+            return;
         }
     }
 

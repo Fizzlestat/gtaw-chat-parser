@@ -9,11 +9,14 @@ public sealed class CaptureService : IDisposable
     private readonly AppConfig _config;
     private readonly object _gate = new();
     private readonly NuiChatClient _reader;
+    private readonly GameChatLog _gameLog = new();
+    private readonly LogOnlyCursor _logLines = new();
     private ChatSession? _session;
     private string? _lastSavedPath;
     private bool _disposed;
     private DateTime _nextPortScan = DateTime.MinValue;
     private string? _lastStatus;
+    private bool _gameLogAnnounced;
 
     public CaptureService(AppConfig config)
     {
@@ -120,6 +123,7 @@ public sealed class CaptureService : IDisposable
                     if (HasSession())
                     {
                         missingSince ??= DateTime.UtcNow;
+                        AppendGameLog();
                         if (DateTime.UtcNow - missingSince.Value >= CloseGrace)
                         {
                             FinalizeSession();
@@ -144,31 +148,16 @@ public sealed class CaptureService : IDisposable
 
                 var visible = await _reader.ReadLinesAsync(cancellationToken).ConfigureAwait(false);
                 missingSince = null;
-                if (visible.Count == 0)
+                if (visible.Count > 0)
                 {
-                    SetStatus(HasSession() ? $"Capturing · {LineCount()} lines" : "Waiting for GTAW chat");
-                    await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken).ConfigureAwait(false);
-                    continue;
-                }
-
+                var capturedAt = DateTime.UtcNow;
                 var plainVisible = visible.Select(line => line.Plain).ToList();
                 var overlap = ChatLog.FindOverlap(previous, plainVisible);
                 var fresh = visible.Skip(overlap).ToList();
-                if (overlap > 0)
-                {
-                    var painted = new List<string>(overlap);
-                    for (var i = 0; i < overlap; i++)
-                        painted.Add(ChatLog.FormatLine(visible[i].Colored, DateTime.UtcNow));
-
-                    lock (_gate)
-                        _session?.PaintColors(painted);
-                }
-
                 previous = plainVisible;
 
                 if (fresh.Count > 0)
                 {
-                    var capturedAt = DateTime.UtcNow;
                     var notify = baselineTaken || fresh.Count <= 3;
                     var formatted = new List<string>();
                     var colored = new List<string>();
@@ -179,6 +168,13 @@ public sealed class CaptureService : IDisposable
                             continue;
 
                         var withColor = ChatLog.FormatLine(line.Colored, capturedAt);
+                        if (_logLines.ClaimDom(plain))
+                        {
+                            lock (_gate)
+                                _session?.PaintMatch(plain, withColor.Length == 0 ? plain : withColor);
+                            continue;
+                        }
+
                         formatted.Add(plain);
                         colored.Add(withColor.Length == 0 ? plain : withColor);
                     }
@@ -188,7 +184,7 @@ public sealed class CaptureService : IDisposable
                     {
                         if (formatted.Count > 0 && _session == null)
                         {
-                            _session = ChatSession.Start(fresh[0].Plain, capturedAt);
+                            _session = ChatSession.Start(formatted[0], capturedAt);
                             startedNew = true;
                         }
 
@@ -218,7 +214,16 @@ public sealed class CaptureService : IDisposable
                     }
                 }
 
-                SetStatus($"Capturing · {LineCount()} lines");
+                var coloredVisible = new List<string>(visible.Count);
+                foreach (var line in visible)
+                    coloredVisible.Add(ChatLog.FormatLine(line.Colored, capturedAt));
+
+                lock (_gate)
+                    _session?.PaintColors(coloredVisible);
+                }
+
+                AppendGameLog();
+                SetStatus(HasSession() ? $"Capturing · {LineCount()} lines" : "Waiting for GTAW chat");
                 if (IsDirty() && DateTime.UtcNow - lastArchive >= ArchiveInterval)
                 {
                     var path = SaveNow();
@@ -237,6 +242,8 @@ public sealed class CaptureService : IDisposable
             catch (Exception exception)
             {
                 _reader.Reset();
+                if (presence.ClientRunning || presence.GameRunning)
+                    AppendGameLog();
                 if (!presence.GameRunning && HasSession())
                 {
                     missingSince ??= DateTime.UtcNow;
@@ -346,6 +353,73 @@ public sealed class CaptureService : IDisposable
         }
     }
 
+    private void AppendGameLog()
+    {
+        try
+        {
+            if (!_gameLog.TryRead(out var header, out var logLines))
+                return;
+
+            List<string> sessionLines;
+            lock (_gate)
+                sessionLines = _session == null ? [] : [.. _session.Lines];
+
+            var extras = _logLines.Take(header, logLines, sessionLines);
+            if (extras.Count == 0)
+                return;
+
+            var capturedAt = DateTime.UtcNow;
+            var formatted = new List<string>(extras.Count);
+            foreach (var line in extras)
+            {
+                var plain = ChatLog.FormatLine(line, capturedAt);
+                if (plain.Length > 0)
+                    formatted.Add(plain);
+            }
+
+            if (formatted.Count == 0)
+                return;
+
+            var startedNew = false;
+            lock (_gate)
+            {
+                if (_session == null)
+                {
+                    _session = ChatSession.Start(formatted[0], capturedAt);
+                    startedNew = true;
+                }
+
+                _session.Add(formatted, formatted);
+            }
+
+            _logLines.Remember(formatted);
+            if (!_gameLogAnnounced)
+            {
+                _gameLogAnnounced = true;
+                AppLog.Info("Reading lines that are only in the GTAW session log.");
+            }
+
+            if (startedNew)
+            {
+                AppLog.Info($"Session started {capturedAt:yyyy-MM-dd HH:mm:ss}.");
+            }
+
+            PersistJournal();
+            try
+            {
+                LinesAppended?.Invoke(formatted);
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error("Keyword notification failed.", exception);
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Could not read the GTAW session log.", exception);
+        }
+    }
+
     private void FinalizeSession()
     {
         string? path = null;
@@ -364,6 +438,8 @@ public sealed class CaptureService : IDisposable
 
         DeleteJournal();
         _reader.Reset();
+        _logLines.Reset();
+        _gameLogAnnounced = false;
         if (path != null)
         {
             AppLog.Info($"Game closed, saved {path}");

@@ -137,6 +137,27 @@ public class ChatLogTests
     }
 
     [Fact]
+    public void Color_refresh_does_not_replace_a_log_only_emote()
+    {
+        var session = ChatSession.Start("[18:00:00] Welcome", CapturedAt);
+        session.Add(
+            ["[18:00:00] Welcome", "[18:00:01] > Alex waves", "[18:00:02] Alex says: hi"],
+            ["[18:00:00] Welcome", "[18:00:02] ^#FFFFFFAlex says: hi", "[18:00:02] Alex says: hi"]);
+
+        session.PaintColors([
+            "[18:00:00] ^#AABBCCWelcome",
+            "[18:00:02] ^#FFFFFFAlex says: hi"
+        ]);
+
+        Assert.Equal("[18:00:00] ^#AABBCCWelcome", session.DisplayLines[0]);
+        Assert.Equal("[18:00:01] > Alex waves", session.DisplayLines[1]);
+        Assert.Equal("[18:00:02] ^#FFFFFFAlex says: hi", session.DisplayLines[2]);
+        Assert.Equal(
+            "^#C2A2DA[18:00:01] > Alex waves",
+            ChatLog.ForTranscript("[18:00:01] > Alex waves", "[18:00:02] ^#FFFFFFAlex says: hi", [], false));
+    }
+
+    [Fact]
     public void Transcript_keeps_color_codes_unless_the_line_is_highlighted()
     {
         var plain = "[14:05:09] John Doe says: Hello";
@@ -169,6 +190,7 @@ public class ChatLogTests
         Assert.StartsWith("^#BB9BD9", ChatLog.WithFallbackColor("[18:19:32] * Selene Watson me line"));
         Assert.StartsWith("^#BB9BD9", ChatLog.WithFallbackColor("[18:19:34] * do line (( Selene Watson ))*"));
         Assert.StartsWith("^#BB9BD9", ChatLog.WithFallbackColor("[18:19:37] * Selene Watson's line"));
+        Assert.StartsWith("^#C2A2DA", ChatLog.WithFallbackColor("[18:19:41] > Selene Watson waves"));
         Assert.Equal("[18:19:38] * (A) Admin message", ChatLog.WithFallbackColor("[18:19:38] * (A) Admin message"));
         Assert.Equal("[18:19:40] Weather forecast:", ChatLog.WithFallbackColor("[18:19:40] Weather forecast:"));
 

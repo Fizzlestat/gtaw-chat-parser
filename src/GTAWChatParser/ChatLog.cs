@@ -20,6 +20,10 @@ public static class ChatLog
         @"^\(\(\s*\(\d+\)\s+[^:\r\n]+:\s",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex AnnotatedEmote = new(
+        @"^>\s*\S",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex RoleplayAction = new(
         @"^\*\s+\S",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -166,10 +170,25 @@ public static class ChatLog
         if (FindKeywords(plain, keywords, caseSensitive).Count > 0)
             return plain;
 
-        if (!string.IsNullOrWhiteSpace(colored) && colored.Contains("^#", StringComparison.Ordinal))
+        if (!string.IsNullOrWhiteSpace(colored) && colored.Contains("^#", StringComparison.Ordinal) && SameMessage(plain, colored))
             return colored;
 
         return WithFallbackColor(plain);
+    }
+
+    private static bool SameMessage(string plain, string colored)
+    {
+        var stripped = StripColorCodes(colored).Trim();
+        var plainTime = TimestampPrefix.Match(plain);
+        var coloredTime = TimestampPrefix.Match(stripped);
+        if (plainTime.Success && coloredTime.Success &&
+            !string.Equals(plainTime.Groups["time"].Value, coloredTime.Groups["time"].Value, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return string.Equals(plain, stripped, StringComparison.Ordinal) ||
+               (plainTime.Success && coloredTime.Success);
     }
 
     public static string WithFallbackColor(string line)
@@ -190,6 +209,9 @@ public static class ChatLog
 
         if (LocalOoc.IsMatch(body))
             return "939498";
+
+        if (AnnotatedEmote.IsMatch(body))
+            return "C2A2DA";
 
         if (RoleplayAction.IsMatch(body) && !AdminChat.IsMatch(body))
             return "BB9BD9";

@@ -39,8 +39,9 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            AppLog.Error("Settings file could not be read.", exception);
+            AppLog.Error("Settings file could not be read. It was left unchanged.", exception);
             _config = new AppConfig();
+            _config.ProtectExistingFile();
         }
 
         _service = new CaptureService(_config);
