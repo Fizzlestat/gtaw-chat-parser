@@ -95,7 +95,7 @@
                             </ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding Text}" Foreground="{Binding Foreground}" TextWrapping="Wrap" FontFamily="{DynamicResource TranscriptFont}" FontSize="14"/>
+                                    <local:TranscriptBlock Runs="{Binding Runs}" TextWrapping="Wrap" FontFamily="{DynamicResource TranscriptFont}" FontSize="14"/>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>

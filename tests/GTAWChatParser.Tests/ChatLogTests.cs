@@ -46,6 +46,14 @@ public class ChatLogTests
     }
 
     [Fact]
+    public void Color_code_does_not_add_a_second_timestamp()
+    {
+        var line = ChatLog.FormatLine("^#71CB71[18:12:36] Health restored!", CapturedAt);
+        Assert.Equal("^#71CB71[18:12:36] Health restored!", line);
+        Assert.Equal(new DateTime(2026, 10, 22, 18, 12, 36), ChatLog.ResolveTimestamp(line, CapturedAt));
+    }
+
+    [Fact]
     public void Missing_timestamp_uses_the_capture_clock()
     {
         var line = ChatLog.FormatLine("  John   Doe says: Hello \r\n there ", CapturedAt);
@@ -116,12 +124,57 @@ public class ChatLogTests
     public void Saved_text_round_trips_through_the_session_header()
     {
         var session = ChatSession.Start("[9:01:02] Hello", CapturedAt);
-        session.Add([ChatLog.FormatLine("[9:01:02] Hello", CapturedAt)]);
+        session.Add([ChatLog.FormatLine("[9:01:02] Hello", CapturedAt)], ["[9:01:02] ^#C8A2FFHello"]);
         var loaded = ChatSession.TryLoad(session.ToFileText());
 
         Assert.NotNull(loaded);
         Assert.Equal(new DateTime(2026, 10, 22, 9, 1, 2), loaded.StartedAt);
         Assert.Equal("[9:01:02] Hello", Assert.Single(loaded.Lines));
+
+        session.PaintColors(["[9:01:02] ^#FFBB33Hello"]);
+        Assert.Equal("[9:01:02] Hello", session.Lines[0]);
+        Assert.Equal("[9:01:02] ^#FFBB33Hello", session.DisplayLines[0]);
+    }
+
+    [Fact]
+    public void Transcript_keeps_color_codes_unless_the_line_is_highlighted()
+    {
+        var plain = "[14:05:09] John Doe says: Hello";
+        var colored = "[14:05:09] ^#FFBB33John Doe says: Hello";
+
+        Assert.Equal(colored, ChatLog.ForTranscript(plain, colored, ["bank"], false));
+        Assert.Equal(plain, ChatLog.ForTranscript(plain, colored, ["John"], false));
+        Assert.Equal("John Doe says: Hello", ChatLog.StripColorCodes("^#FFBB33John Doe says: Hello"));
+
+        var spans = ChatLog.SplitColorCodes("[14:05:09] ^#FFBB33John ^#FFFFFFDoe");
+        Assert.Equal(3, spans.Count);
+        Assert.Equal("[14:05:09] ", spans[0].Text);
+        Assert.Null(spans[0].Hex);
+        Assert.Equal("John ", spans[1].Text);
+        Assert.Equal("#FFBB33", spans[1].Hex);
+        Assert.Equal("Doe", spans[2].Text);
+        Assert.Equal("#FFFFFF", spans[2].Hex);
+    }
+
+    [Fact]
+    public void Missing_hud_color_uses_the_message_fallback()
+    {
+        Assert.StartsWith("^#F4E800", ChatLog.WithFallbackColor("[18:19:27] (( PM from (468) Selene Watson: private message ))"));
+        Assert.StartsWith("^#F4E800", ChatLog.WithFallbackColor("[18:19:27] (( PM to (468) Selene Watson: private message ))"));
+        Assert.StartsWith("^#FFFFFF", ChatLog.WithFallbackColor("[18:19:28] Selene Watson says: IC chat"));
+        Assert.StartsWith("^#FFFFFF", ChatLog.WithFallbackColor("[18:19:28] Name Lastname says [low] quietly"));
+        Assert.StartsWith("^#FFFFFF", ChatLog.WithFallbackColor("[18:19:28] Name Lastname says [lower] quietly"));
+        Assert.StartsWith("^#FFFFFF", ChatLog.WithFallbackColor("[18:19:28] Name Last says [low] (to Name Lastname): hello"));
+        Assert.StartsWith("^#939498", ChatLog.WithFallbackColor("[18:19:31] (( (468) Selene Watson: /b chat ))"));
+        Assert.StartsWith("^#BB9BD9", ChatLog.WithFallbackColor("[18:19:32] * Selene Watson me line"));
+        Assert.StartsWith("^#BB9BD9", ChatLog.WithFallbackColor("[18:19:34] * do line (( Selene Watson ))*"));
+        Assert.StartsWith("^#BB9BD9", ChatLog.WithFallbackColor("[18:19:37] * Selene Watson's line"));
+        Assert.Equal("[18:19:38] * (A) Admin message", ChatLog.WithFallbackColor("[18:19:38] * (A) Admin message"));
+        Assert.Equal("[18:19:40] Weather forecast:", ChatLog.WithFallbackColor("[18:19:40] Weather forecast:"));
+
+        var hud = "[18:19:32] ^#00FF00* Selene Watson me line";
+        Assert.Equal(hud, ChatLog.ForTranscript("[18:19:32] * Selene Watson me line", hud, [], false));
+        Assert.Equal("[18:19:32] * Selene Watson me line", ChatLog.ForTranscript("[18:19:32] * Selene Watson me line", null, ["Selene"], false));
     }
 
     [Fact]

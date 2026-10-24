@@ -4,8 +4,34 @@ using System.Text.RegularExpressions;
 
 namespace GTAWChatParser;
 
+public readonly record struct ColorSpan(string Text, string? Hex);
+
 public static class ChatLog
 {
+    private static readonly Regex ColorCode = new(
+        @"\^#[0-9A-Fa-f]{6}",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex PrivateMessage = new(
+        @"^\(\(\s*PM\s+(from|to)\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static readonly Regex LocalOoc = new(
+        @"^\(\(\s*\(\d+\)\s+[^:\r\n]+:\s",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex RoleplayAction = new(
+        @"^\*\s+\S",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex AdminChat = new(
+        @"^\*\s+\(A\)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    private static readonly Regex InCharacter = new(
+        @"\bsays(?::|\s+\[low(?:er)?\])",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
     private static readonly Regex TimestampPrefix = new(
         @"^\[(?<time>\d{1,2}:\d{2}:\d{2})\]\s+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -20,7 +46,7 @@ public static class ChatLog
         if (line.Length == 0)
             return string.Empty;
 
-        if (TimestampPrefix.IsMatch(line))
+        if (TimestampPrefix.IsMatch(SkipLeadingColorCodes(line)))
             return line;
 
         return $"[{capturedAt.ToString("HH:mm:ss", CultureInfo.InvariantCulture)}] {line}";
@@ -28,7 +54,7 @@ public static class ChatLog
 
     public static DateTime ResolveTimestamp(string rawLine, DateTime capturedAt)
     {
-        var match = TimestampPrefix.Match(Collapse(rawLine));
+        var match = TimestampPrefix.Match(SkipLeadingColorCodes(Collapse(rawLine)));
         if (!match.Success)
             return capturedAt;
 
@@ -96,6 +122,82 @@ public static class ChatLog
         }
 
         return 0;
+    }
+
+    public static string StripColorCodes(string line) => ColorCode.Replace(line, string.Empty);
+
+    private static string SkipLeadingColorCodes(string line)
+    {
+        var index = 0;
+        while (index < line.Length)
+        {
+            var match = ColorCode.Match(line, index);
+            if (!match.Success || match.Index != index)
+                break;
+
+            index += match.Length;
+        }
+
+        return index == 0 ? line : line[index..];
+    }
+
+    public static IReadOnlyList<ColorSpan> SplitColorCodes(string line)
+    {
+        var spans = new List<ColorSpan>();
+        var index = 0;
+        string? hex = null;
+        foreach (Match match in ColorCode.Matches(line))
+        {
+            if (match.Index > index)
+                spans.Add(new ColorSpan(line[index..match.Index], hex));
+
+            hex = match.Value[1..];
+            index = match.Index + match.Length;
+        }
+
+        if (index < line.Length)
+            spans.Add(new ColorSpan(line[index..], hex));
+
+        return spans;
+    }
+
+    public static string ForTranscript(string plain, string? colored, IEnumerable<string> keywords, bool caseSensitive = false)
+    {
+        if (FindKeywords(plain, keywords, caseSensitive).Count > 0)
+            return plain;
+
+        if (!string.IsNullOrWhiteSpace(colored) && colored.Contains("^#", StringComparison.Ordinal))
+            return colored;
+
+        return WithFallbackColor(plain);
+    }
+
+    public static string WithFallbackColor(string line)
+    {
+        var match = TimestampPrefix.Match(line);
+        var body = match.Success ? line[match.Length..] : line;
+        var hex = FallbackHex(body);
+        if (hex == null)
+            return line;
+
+        return "^#" + hex + line;
+    }
+
+    private static string? FallbackHex(string body)
+    {
+        if (PrivateMessage.IsMatch(body))
+            return "F4E800";
+
+        if (LocalOoc.IsMatch(body))
+            return "939498";
+
+        if (RoleplayAction.IsMatch(body) && !AdminChat.IsMatch(body))
+            return "BB9BD9";
+
+        if (InCharacter.IsMatch(body))
+            return "FFFFFF";
+
+        return null;
     }
 
     public static IReadOnlyList<string> FindKeywords(string formattedLine, IEnumerable<string> keywords, bool caseSensitive = false)

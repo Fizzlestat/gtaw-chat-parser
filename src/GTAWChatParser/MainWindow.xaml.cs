@@ -627,18 +627,20 @@ public partial class MainWindow : Window
 
     private void RenderChat(string snapshot, bool force = false)
     {
-        if (!force && snapshot == _rendered)
+        _ = snapshot;
+        var transcript = string.Join("\n", _service.GetTranscript(_config.Keywords, _config.NotificationCaseSensitive));
+        if (!force && transcript == _rendered)
             return;
 
         var follow = _rendered.Length == 0 || IsNearBottom();
-        _rendered = snapshot;
+        _rendered = transcript;
         _lines.Clear();
-        foreach (var line in snapshot.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        foreach (var line in transcript.Split('\n'))
         {
             if (line.Length == 0)
                 continue;
 
-            _lines.Add(new TranscriptLine(line, LineBrush(line)));
+            _lines.Add(new TranscriptLine(line, LineBrush(line), line.Contains("^#", StringComparison.Ordinal)));
         }
 
         var hasText = _lines.Count > 0;
@@ -659,7 +661,7 @@ public partial class MainWindow : Window
         if (line.StartsWith("[DATE:", StringComparison.Ordinal))
             return FindBrush("FrameBrush");
 
-        return ChatLog.FindKeywords(line, _config.Keywords, _config.NotificationCaseSensitive).Count > 0
+        return ChatLog.FindKeywords(ChatLog.StripColorCodes(line), _config.Keywords, _config.NotificationCaseSensitive).Count > 0
             ? FindBrush("HitBrush")
             : FindBrush("LineBrush");
     }
@@ -812,15 +814,78 @@ public partial class MainWindow : Window
     private static extern bool FlashWindow(IntPtr hwnd, bool invert);
 }
 
-internal sealed class TranscriptLine
+internal sealed class TranscriptRun
 {
-    public TranscriptLine(string text, Brush foreground)
+    public TranscriptRun(string text, Brush brush)
     {
         Text = text;
-        Foreground = foreground;
+        Brush = brush;
     }
 
     public string Text { get; }
 
-    public Brush Foreground { get; }
+    public Brush Brush { get; }
+}
+
+internal sealed class TranscriptLine
+{
+    public TranscriptLine(string text, Brush foreground, bool paintColors)
+    {
+        if (!paintColors || !text.Contains("^#", StringComparison.Ordinal))
+        {
+            Runs = [new TranscriptRun(text, foreground)];
+            return;
+        }
+
+        var runs = new List<TranscriptRun>();
+        foreach (var span in ChatLog.SplitColorCodes(text))
+        {
+            if (span.Text.Length == 0)
+                continue;
+
+            runs.Add(new TranscriptRun(span.Text, span.Hex == null ? foreground : ColorBrush(span.Hex, foreground)));
+        }
+
+        Runs = runs.Count == 0 ? [new TranscriptRun(text, foreground)] : runs;
+    }
+
+    public IReadOnlyList<TranscriptRun> Runs { get; }
+
+    private static Brush ColorBrush(string hex, Brush fallback)
+    {
+        if (!HudPalette.TryParse(hex, out var color))
+            return fallback;
+
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+}
+
+internal sealed class TranscriptBlock : TextBlock
+{
+    public static readonly DependencyProperty RunsProperty = DependencyProperty.Register(
+        nameof(Runs),
+        typeof(IEnumerable<TranscriptRun>),
+        typeof(TranscriptBlock),
+        new PropertyMetadata(null, OnRunsChanged));
+
+    public IEnumerable<TranscriptRun>? Runs
+    {
+        get => (IEnumerable<TranscriptRun>?)GetValue(RunsProperty);
+        set => SetValue(RunsProperty, value);
+    }
+
+    private static void OnRunsChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    {
+        if (sender is not TranscriptBlock block)
+            return;
+
+        block.Inlines.Clear();
+        if (args.NewValue is not IEnumerable<TranscriptRun> runs)
+            return;
+
+        foreach (var run in runs)
+            block.Inlines.Add(new System.Windows.Documents.Run(run.Text) { Foreground = run.Brush });
+    }
 }

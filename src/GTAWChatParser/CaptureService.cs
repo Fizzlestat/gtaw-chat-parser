@@ -33,6 +33,25 @@ public sealed class CaptureService : IDisposable
             return _session?.ToFileText() ?? string.Empty;
     }
 
+    public IReadOnlyList<string> GetTranscript(IEnumerable<string> keywords, bool caseSensitive)
+    {
+        lock (_gate)
+        {
+            if (_session == null)
+                return [];
+
+            var lines = new List<string> { ChatLog.CreateHeader(_session.StartedAt) };
+            for (var i = 0; i < _session.Lines.Count; i++)
+            {
+                var plain = _session.Lines[i];
+                var colored = i < _session.DisplayLines.Count ? _session.DisplayLines[i] : plain;
+                lines.Add(ChatLog.ForTranscript(plain, colored, keywords, caseSensitive));
+            }
+
+            return lines;
+        }
+    }
+
     public string? SaveNow()
     {
         string? text;
@@ -132,25 +151,48 @@ public sealed class CaptureService : IDisposable
                     continue;
                 }
 
-                var overlap = ChatLog.FindOverlap(previous, visible);
+                var plainVisible = visible.Select(line => line.Plain).ToList();
+                var overlap = ChatLog.FindOverlap(previous, plainVisible);
                 var fresh = visible.Skip(overlap).ToList();
-                previous = visible.ToList();
+                if (overlap > 0)
+                {
+                    var painted = new List<string>(overlap);
+                    for (var i = 0; i < overlap; i++)
+                        painted.Add(ChatLog.FormatLine(visible[i].Colored, DateTime.UtcNow));
+
+                    lock (_gate)
+                        _session?.PaintColors(painted);
+                }
+
+                previous = plainVisible;
 
                 if (fresh.Count > 0)
                 {
                     var capturedAt = DateTime.UtcNow;
                     var notify = baselineTaken || fresh.Count <= 3;
-                    var formatted = fresh.Select(line => ChatLog.FormatLine(line, capturedAt)).Where(line => line.Length > 0).ToList();
+                    var formatted = new List<string>();
+                    var colored = new List<string>();
+                    foreach (var line in fresh)
+                    {
+                        var plain = ChatLog.FormatLine(line.Plain, capturedAt);
+                        if (plain.Length == 0)
+                            continue;
+
+                        var withColor = ChatLog.FormatLine(line.Colored, capturedAt);
+                        formatted.Add(plain);
+                        colored.Add(withColor.Length == 0 ? plain : withColor);
+                    }
+
                     var startedNew = false;
                     lock (_gate)
                     {
                         if (formatted.Count > 0 && _session == null)
                         {
-                            _session = ChatSession.Start(fresh[0], capturedAt);
+                            _session = ChatSession.Start(fresh[0].Plain, capturedAt);
                             startedNew = true;
                         }
 
-                        _session?.Add(formatted);
+                        _session?.Add(formatted, colored);
                     }
 
                     if (startedNew)

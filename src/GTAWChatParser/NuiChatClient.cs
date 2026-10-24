@@ -5,6 +5,23 @@ using System.Text.Json.Nodes;
 
 namespace GTAWChatParser;
 
+internal sealed class CapturedLine
+{
+    public CapturedLine()
+    {
+    }
+
+    public CapturedLine(string plain, string colored)
+    {
+        Plain = plain;
+        Colored = colored;
+    }
+
+    public string Plain { get; set; } = "";
+
+    public string Colored { get; set; } = "";
+}
+
 internal sealed class NuiChatClient : IDisposable
 {
     internal const string RootUiUrl = "nui://game/ui/root.html";
@@ -26,7 +43,7 @@ internal sealed class NuiChatClient : IDisposable
         _port = port;
     }
 
-    public async Task<IReadOnlyList<string>> ReadLinesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<CapturedLine>> ReadLinesAsync(CancellationToken cancellationToken)
     {
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         using var response = await RequestAsync("Runtime.evaluate", new JsonObject
@@ -40,9 +57,17 @@ internal sealed class NuiChatClient : IDisposable
         if (string.IsNullOrWhiteSpace(payload))
             return [];
 
-        var lines = JsonSerializer.Deserialize<string[]>(payload) ?? [];
-        return lines.Where(line => !string.IsNullOrWhiteSpace(line)).Select(line => line.Trim()).ToList();
+        var lines = JsonSerializer.Deserialize<CapturedLine[]>(payload, LineJson) ?? [];
+        return lines
+            .Where(line => !string.IsNullOrWhiteSpace(line.Plain))
+            .Select(line => new CapturedLine(line.Plain.Trim(), string.IsNullOrWhiteSpace(line.Colored) ? line.Plain.Trim() : line.Colored.Trim()))
+            .ToList();
     }
+
+    private static readonly JsonSerializerOptions LineJson = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     internal static string? ReadEvaluateText(JsonElement evaluateResult)
     {

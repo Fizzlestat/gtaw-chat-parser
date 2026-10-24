@@ -11,6 +11,8 @@ public sealed class ChatSession
 
     public List<string> Lines { get; } = [];
 
+    public List<string> DisplayLines { get; } = [];
+
     public bool IsDirty { get; private set; }
 
     public static ChatSession Start(string firstRawLine, DateTime capturedAt)
@@ -34,26 +36,47 @@ public sealed class ChatSession
         for (var i = 1; i < lines.Length; i++)
         {
             if (lines[i].Length > 0)
+            {
                 session.Lines.Add(lines[i]);
+                session.DisplayLines.Add(lines[i]);
+            }
         }
 
         return session;
     }
 
-    public void Add(IEnumerable<string> formattedLines)
+    public void Add(IReadOnlyList<string> formattedLines, IReadOnlyList<string> coloredLines)
     {
         var added = false;
-        foreach (var line in formattedLines)
+        for (var i = 0; i < formattedLines.Count; i++)
         {
+            var line = formattedLines[i];
             if (line.Length == 0)
                 continue;
 
+            var colored = i < coloredLines.Count ? coloredLines[i] : line;
             Lines.Add(line);
+            DisplayLines.Add(colored.Length == 0 ? line : colored);
             added = true;
         }
 
         if (added)
             IsDirty = true;
+    }
+
+    public void PaintColors(IReadOnlyList<string> coloredTail)
+    {
+        var count = Math.Min(coloredTail.Count, Lines.Count);
+        var start = Lines.Count - count;
+        for (var i = 0; i < count; i++)
+        {
+            var colored = coloredTail[i];
+            var index = start + i;
+            if (index >= DisplayLines.Count || string.IsNullOrEmpty(colored) || !colored.Contains("^#", StringComparison.Ordinal))
+                continue;
+
+            DisplayLines[index] = colored;
+        }
     }
 
     public void MarkClean() => IsDirty = false;
