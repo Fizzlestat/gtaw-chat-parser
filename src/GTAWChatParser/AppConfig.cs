@@ -40,6 +40,8 @@ public sealed class AppConfig
 
     public bool StartMinimizedToTray { get; set; }
 
+    public bool CheckUpdatesOnStartup { get; set; } = true;
+
     [JsonIgnore]
     public string FilePath { get; private set; } = AppPaths.ConfigPath;
 
@@ -112,6 +114,7 @@ public sealed class AppConfig
         TranscriptFont = string.IsNullOrWhiteSpace(other.TranscriptFont) ? "Consolas" : other.TranscriptFont.Trim();
         StartWithWindows = other.StartWithWindows;
         StartMinimizedToTray = other.StartMinimizedToTray;
+        CheckUpdatesOnStartup = other.CheckUpdatesOnStartup;
     }
 
     public static List<string> NormalizeKeywords(IEnumerable<string>? keywords, bool caseSensitive = false)

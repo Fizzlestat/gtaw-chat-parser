@@ -233,7 +233,7 @@
                                         <TextBlock x:Name="StartupChevron" Text="›" FontSize="16" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                             <TextBlock.RenderTransform><RotateTransform x:Name="StartupAngle" Angle="0"/></TextBlock.RenderTransform>
                                         </TextBlock>
-                                        <TextBlock Text="Startup" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource LineBrush}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Application" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource LineBrush}" FontWeight="SemiBold"/>
                                     </DockPanel>
                                 </Border>
                                 <Border x:Name="StartupBody" Background="{DynamicResource CardBrush}" CornerRadius="0,0,8,8" Padding="14,10,14,12" Opacity="0" Visibility="Collapsed" ClipToBounds="True">
@@ -247,6 +247,11 @@
                                             <CheckBox x:Name="TrayStartupToggle" Style="{StaticResource HudToggle}" DockPanel.Dock="Right" IsEnabled="False" Checked="TrayStartup_Changed" Unchecked="TrayStartup_Changed"/>
                                             <TextBlock x:Name="TrayStartupLabel" Text="Start minimized to tray" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" Opacity="0.45"/>
                                         </DockPanel>
+                                        <DockPanel Margin="0,12,0,0">
+                                            <CheckBox x:Name="UpdateToggle" Style="{StaticResource HudToggle}" DockPanel.Dock="Right" Checked="UpdateCheck_Changed" Unchecked="UpdateCheck_Changed"/>
+                                            <TextBlock Text="Check for updates on startup" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                                        </DockPanel>
+                                        <Button Content="Check for updates" Style="{StaticResource HudButton}" Margin="0,14,0,0" HorizontalAlignment="Left" Click="CheckUpdates_Click"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>

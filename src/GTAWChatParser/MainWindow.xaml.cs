@@ -24,6 +24,8 @@ public partial class MainWindow : Window
     private bool _closing;
     private bool _exitConfirmed;
     private bool _confirming;
+    private readonly CancellationTokenSource _updates = new();
+    private bool _updateBusy;
     private bool _binding = true;
     private bool _themeBinding = true;
     private int _lastSeconds = 5;
@@ -103,6 +105,8 @@ public partial class MainWindow : Window
         RenderChat(_service.GetSnapshot());
         if (App.LaunchInTray)
             HideToTray();
+        if (_config.CheckUpdatesOnStartup && AppUpdate.IsConfigured)
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => _ = CheckForUpdatesAsync(false)));
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -142,6 +146,7 @@ public partial class MainWindow : Window
         }
 
         _closing = true;
+        _updates.Cancel();
         _refreshTimer.Stop();
         _noticeTimer.Stop();
         KeywordToastWindow.CloseAll();
@@ -306,6 +311,7 @@ public partial class MainWindow : Window
         SoundToggle.IsChecked = _config.NotificationSoundEnabled;
         StartupToggle.IsChecked = _config.StartWithWindows;
         TrayStartupToggle.IsChecked = _config.StartMinimizedToTray;
+        UpdateToggle.IsChecked = _config.CheckUpdatesOnStartup;
         UpdateTrayStartupEnabled();
         CaseToggle.IsChecked = _config.NotificationCaseSensitive;
         _lastSeconds = _config.ResolvedNotificationSeconds;
@@ -738,6 +744,95 @@ public partial class MainWindow : Window
         var enabled = StartupToggle.IsChecked == true;
         TrayStartupToggle.IsEnabled = enabled;
         TrayStartupLabel.Opacity = enabled ? 1 : 0.45;
+    }
+
+    private void UpdateCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_binding)
+            return;
+
+        _config.CheckUpdatesOnStartup = UpdateToggle.IsChecked == true;
+        _config.Save();
+    }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        await CheckForUpdatesAsync(true);
+    }
+
+    private async Task CheckForUpdatesAsync(bool interactive)
+    {
+        if (_updateBusy || _closing)
+            return;
+
+        _updateBusy = true;
+        try
+        {
+            UpdateOffer? offer;
+            try
+            {
+                if (interactive)
+                    ShowNotice("Checking for updates...");
+                offer = await AppUpdate.FindAsync(_updates.Token);
+            }
+            catch (OperationCanceledException) when (_closing || _updates.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error("Update check failed.", exception);
+                if (interactive && !_closing)
+                    ShowNotice(exception is InvalidOperationException ? exception.Message : "Couldn't check for updates.");
+                return;
+            }
+
+            if (_closing)
+                return;
+
+            if (offer == null)
+            {
+                if (interactive)
+                    ShowNotice("You're on the latest version.");
+                return;
+            }
+
+            var message = "Version " + offer.Version + " is ready. The parser will close, install it, and open again.";
+            var accepted = IsVisible
+                ? ConfirmWindow.Ask(this, "Update available", message, "Update")
+                : ConfirmWindow.Ask(null, "Update available", message, "Update");
+            if (!accepted || _closing)
+                return;
+
+            ShowNotice("Downloading the update...");
+            _noticeTimer.Stop();
+            try
+            {
+                await AppUpdate.DownloadAsync(offer, _updates.Token);
+                if (_closing)
+                    return;
+
+                AppUpdate.BeginInstall();
+            }
+            catch (OperationCanceledException) when (_closing || _updates.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error("Update download failed.", exception);
+                if (!_closing)
+                    ShowNotice(exception is InvalidOperationException ? exception.Message : "The update could not be downloaded.");
+                return;
+            }
+
+            _exitConfirmed = true;
+            Close();
+        }
+        finally
+        {
+            _updateBusy = false;
+        }
     }
 
     private void HideToTray()

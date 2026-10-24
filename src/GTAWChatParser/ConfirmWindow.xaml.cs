@@ -9,9 +9,21 @@ public partial class ConfirmWindow : Window
         InitializeComponent();
     }
 
-    public static bool Ask(Window? owner)
+    public static bool Ask(Window? owner, string? title = null, string? message = null, string? confirm = null)
     {
         var dialog = new ConfirmWindow();
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            dialog.Title = title;
+            dialog.TitleText.Text = title;
+        }
+
+        if (!string.IsNullOrWhiteSpace(message))
+            dialog.MessageText.Text = message;
+
+        if (!string.IsNullOrWhiteSpace(confirm))
+            dialog.ConfirmButton.Content = confirm;
+
         if (owner is { IsVisible: true })
         {
             dialog.Owner = owner;
