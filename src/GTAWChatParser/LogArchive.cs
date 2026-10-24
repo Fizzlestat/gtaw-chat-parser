@@ -3,10 +3,6 @@ using System.Text;
 
 namespace GTAWChatParser;
 
-/// <summary>
-/// Saves a session as {backup}\{yyyy}\{MMM}\{dd.MMM.yyyy-HH.mm.ss}.txt.
-/// A later save replaces that file only when the new text is longer, so a short reread cannot shrink an existing log.
-/// </summary>
 public static class LogArchive
 {
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);

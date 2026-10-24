@@ -38,7 +38,6 @@ public static class GameProcess
                 }
                 catch
                 {
-                    // A process can exit while its name is being read.
                 }
             }
         }
@@ -103,7 +102,6 @@ public static class GameProcess
                 }
                 catch
                 {
-                    // A process can exit while its name is being read.
                 }
             }
         }

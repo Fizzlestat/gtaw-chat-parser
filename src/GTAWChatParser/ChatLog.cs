@@ -4,9 +4,6 @@ using System.Text.RegularExpressions;
 
 namespace GTAWChatParser;
 
-/// <summary>
-/// Turns captured HUD lines into the archive text used by GTAW Log Parser.
-/// </summary>
 public static class ChatLog
 {
     private static readonly Regex TimestampPrefix = new(
@@ -79,10 +76,6 @@ public static class ChatLog
         return true;
     }
 
-    /// <summary>
-    /// Visible chat is a sliding window: the oldest lines fall off the top and new lines are added at the bottom.
-    /// Returns how many leading lines of the new snapshot are already present at the end of the previous snapshot.
-    /// </summary>
     public static int FindOverlap(IReadOnlyList<string> previous, IReadOnlyList<string> current)
     {
         var max = Math.Min(previous.Count, current.Count);

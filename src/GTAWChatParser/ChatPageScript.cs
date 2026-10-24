@@ -2,10 +2,6 @@ namespace GTAWChatParser;
 
 internal static class ChatPageScript
 {
-    /// <summary>
-    /// Reads GTA World's visible chat rows in document order.
-    /// Times painted beside a row, including CSS ::before text, are kept as a [H:mm:ss] prefix.
-    /// </summary>
     public const string ExtractLines = """
         (() => {
           const timePattern = /\b\d{1,2}:\d{2}:\d{2}\b/;

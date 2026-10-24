@@ -28,7 +28,6 @@ public static class AppLog
         }
         catch
         {
-            // Logging must not take down chat capture.
         }
     }
 }

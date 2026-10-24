@@ -44,10 +44,6 @@ internal sealed class NuiChatClient : IDisposable
         return lines.Where(line => !string.IsNullOrWhiteSpace(line)).Select(line => line.Trim()).ToList();
     }
 
-    /// <summary>
-    /// Reads the string returned by Runtime.evaluate. The caller already unwrapped the inspector envelope,
-    /// so the value sits at result.value.
-    /// </summary>
     internal static string? ReadEvaluateText(JsonElement evaluateResult)
     {
         if (evaluateResult.ValueKind != JsonValueKind.Object)
@@ -110,7 +106,6 @@ internal sealed class NuiChatClient : IDisposable
         {
             ["frameId"] = frameId,
             ["worldName"] = "gtaw-chat-parser",
-            // Protocol spelling is "Univeral"; the inspector rejects the corrected word.
             ["grantUniveralAccess"] = true
         }, cancellationToken).ConfigureAwait(false);
 
@@ -248,7 +243,6 @@ internal sealed class NuiChatClient : IDisposable
         }
         catch
         {
-            // The socket is already unusable.
         }
 
         socket.Dispose();

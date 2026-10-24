@@ -138,8 +138,7 @@ public sealed class CaptureService : IDisposable
 
                 if (fresh.Count > 0)
                 {
-                    var capturedAt = DateTime.Now;
-                    // A large first snapshot is chat that was already on screen. Small bursts and later lines are new.
+                    var capturedAt = DateTime.UtcNow;
                     var notify = baselineTaken || fresh.Count <= 3;
                     var formatted = fresh.Select(line => ChatLog.FormatLine(line, capturedAt)).Where(line => line.Length > 0).ToList();
                     var startedNew = false;
