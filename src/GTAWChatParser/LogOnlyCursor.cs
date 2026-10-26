@@ -11,8 +11,8 @@ internal static class LogLines
 
     public static bool Same(string left, string right)
     {
-        Split(left, out var leftTime, out var leftBody);
-        Split(right, out var rightTime, out var rightBody);
+        Split(left, out TimeSpan? leftTime, out string leftBody);
+        Split(right, out TimeSpan? rightTime, out string rightBody);
         if (!string.Equals(Normalize(leftBody), Normalize(rightBody), StringComparison.Ordinal))
             return false;
 
@@ -24,13 +24,13 @@ internal static class LogLines
 
     public static string MatchKey(string line)
     {
-        Split(line, out _, out var body);
+        Split(line, out _, out string body);
         return Normalize(body);
     }
 
     public static void Split(string line, out TimeSpan? time, out string body)
     {
-        var match = Timestamp.Match(line);
+        System.Text.RegularExpressions.Match match = Timestamp.Match(line);
         if (!match.Success)
         {
             time = null;
@@ -43,7 +43,7 @@ internal static class LogLines
             match.Groups["time"].Value,
             ["h\\:mm\\:ss", "hh\\:mm\\:ss"],
             CultureInfo.InvariantCulture,
-            out var parsed)
+            out TimeSpan parsed)
             ? parsed
             : null;
     }
@@ -55,24 +55,24 @@ internal static class LogLines
         if (string.IsNullOrWhiteSpace(text))
             return false;
 
-        var parts = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
-        var start = 0;
+        string[] parts = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
+        int start = 0;
         if (parts.Length > 0 && ChatLog.TryParseHeader(parts[0].Trim(), out _))
         {
             header = parts[0].Trim();
             start = 1;
         }
 
-        for (var i = start; i < parts.Length; i++)
+        for (int i = start; i < parts.Length; i++)
         {
-            var line = parts[i].Trim();
+            string line = parts[i].Trim();
             if (line.Length == 0)
                 continue;
 
             // A chat message can contain a newline (admin reports do). The chat box
             // shows that as one line. The session log stores the break as another
             // row with no timestamp, so join it back onto the line it belongs to.
-            Split(line, out var time, out _);
+            Split(line, out TimeSpan? time, out _);
             if (lines.Count > 0 && time == null)
             {
                 lines[^1] = lines[^1] + " " + line;
@@ -87,14 +87,14 @@ internal static class LogLines
 
     private static string Normalize(string body)
     {
-        var builder = new StringBuilder(body.Length);
-        var pendingSpace = false;
-        var index = 0;
+        StringBuilder builder = new StringBuilder(body.Length);
+        bool pendingSpace = false;
+        int index = 0;
         while (index < body.Length)
         {
             if (body[index] == '!' && index + 1 < body.Length && body[index + 1] == '{')
             {
-                var end = body.IndexOf('}', index + 2);
+                int end = body.IndexOf('}', index + 2);
                 if (end > index)
                 {
                     index = end + 1;
@@ -148,10 +148,10 @@ internal static class LogLines
 
     private static bool IsHex(string text, int start)
     {
-        for (var i = 0; i < 6; i++)
+        for (int i = 0; i < 6; i++)
         {
-            var character = text[start + i];
-            var hex = character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F';
+            char character = text[start + i];
+            bool hex = character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F';
             if (!hex)
                 return false;
         }
@@ -185,16 +185,16 @@ internal sealed class LogOnlyCursor
 
     public void Remember(IReadOnlyList<string> lines)
     {
-        var now = Environment.TickCount64;
-        foreach (var line in lines)
+        long now = Environment.TickCount64;
+        foreach (string line in lines)
             _recent.Add((line, now));
     }
 
     public bool ClaimDom(string plain)
     {
-        var now = Environment.TickCount64;
+        long now = Environment.TickCount64;
         _recent.RemoveAll(item => now - item.At > 120_000);
-        for (var i = 0; i < _recent.Count; i++)
+        for (int i = 0; i < _recent.Count; i++)
         {
             if (!LogLines.Same(_recent[i].Line, plain))
                 continue;
@@ -231,10 +231,10 @@ internal sealed class LogOnlyCursor
             return [];
         }
 
-        var matched = MatchSession(logLines, sessionLines, out var cursor);
-        var emit = new List<string>();
-        var tail = new List<string>();
-        for (var i = _skip; i < logLines.Count; i++)
+        bool[] matched = MatchSession(logLines, sessionLines, out int cursor);
+        List<string> emit = new List<string>();
+        List<string> tail = new List<string>();
+        for (int i = _skip; i < logLines.Count; i++)
         {
             if (matched[i])
                 continue;
@@ -245,18 +245,18 @@ internal sealed class LogOnlyCursor
                 tail.Add(logLines[i]);
         }
 
-        var matured = 0;
+        int matured = 0;
         while (matured < _held.Count && matured < tail.Count &&
                string.Equals(_held[matured], tail[matured], StringComparison.Ordinal))
         {
             matured++;
         }
 
-        for (var i = 0; i < matured; i++)
+        for (int i = 0; i < matured; i++)
             emit.Add(tail[i]);
 
         _held.Clear();
-        for (var i = matured; i < tail.Count; i++)
+        for (int i = matured; i < tail.Count; i++)
             _held.Add(tail[i]);
 
         return emit;
@@ -275,7 +275,7 @@ internal sealed class LogOnlyCursor
 
         if (_anchor != null)
         {
-            for (var i = logLines.Count - 1; i >= 0; i--)
+            for (int i = logLines.Count - 1; i >= 0; i--)
             {
                 if (!string.Equals(logLines[i], _anchor, StringComparison.Ordinal))
                     continue;
@@ -294,12 +294,12 @@ internal sealed class LogOnlyCursor
 
     private static bool[] MatchSession(IReadOnlyList<string> logLines, IReadOnlyList<string> sessionLines, out int cursor)
     {
-        var matched = new bool[logLines.Count];
-        var positions = new Dictionary<string, List<int>>(StringComparer.Ordinal);
-        for (var i = 0; i < logLines.Count; i++)
+        bool[] matched = new bool[logLines.Count];
+        Dictionary<string, List<int>> positions = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+        for (int i = 0; i < logLines.Count; i++)
         {
-            var key = LogLines.MatchKey(logLines[i]);
-            if (!positions.TryGetValue(key, out var list))
+            string key = LogLines.MatchKey(logLines[i]);
+            if (!positions.TryGetValue(key, out List<int>? list))
             {
                 list = [];
                 positions[key] = list;
@@ -308,18 +308,18 @@ internal sealed class LogOnlyCursor
             list.Add(i);
         }
 
-        var next = new Dictionary<string, int>(StringComparer.Ordinal);
+        Dictionary<string, int> next = new Dictionary<string, int>(StringComparer.Ordinal);
         cursor = 0;
-        foreach (var sessionLine in sessionLines)
+        foreach (string sessionLine in sessionLines)
         {
-            var key = LogLines.MatchKey(sessionLine);
-            if (!positions.TryGetValue(key, out var list))
+            string key = LogLines.MatchKey(sessionLine);
+            if (!positions.TryGetValue(key, out List<int>? list))
                 continue;
 
-            var start = next.GetValueOrDefault(key);
-            var found = -1;
-            var foundAt = start;
-            for (var p = start; p < list.Count; p++)
+            int start = next.GetValueOrDefault(key);
+            int found = -1;
+            int foundAt = start;
+            for (int p = start; p < list.Count; p++)
             {
                 if (matched[list[p]])
                     continue;

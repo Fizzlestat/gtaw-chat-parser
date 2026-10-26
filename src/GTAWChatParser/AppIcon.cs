@@ -9,13 +9,13 @@ internal static class AppIcon
 {
     static AppIcon()
     {
-        var visual = new DrawingVisual();
-        using (var context = visual.RenderOpen())
+        DrawingVisual visual = new DrawingVisual();
+        using (DrawingContext context = visual.RenderOpen())
         {
-            var gold = new SolidColorBrush(Color.FromRgb(232, 168, 56));
-            var ink = new SolidColorBrush(Color.FromRgb(28, 20, 8));
+            SolidColorBrush gold = new SolidColorBrush(Color.FromRgb(232, 168, 56));
+            SolidColorBrush ink = new SolidColorBrush(Color.FromRgb(28, 20, 8));
             context.DrawEllipse(gold, null, new Point(16, 16), 15, 15);
-            var text = new FormattedText(
+            FormattedText text = new FormattedText(
                 "G",
                 CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
@@ -26,7 +26,7 @@ internal static class AppIcon
             context.DrawText(text, new Point(16 - text.Width / 2, 15 - text.Height / 2));
         }
 
-        var bitmap = new RenderTargetBitmap(32, 32, 96, 96, PixelFormats.Pbgra32);
+        RenderTargetBitmap bitmap = new RenderTargetBitmap(32, 32, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(visual);
         bitmap.Freeze();
         Image = bitmap;
@@ -42,12 +42,12 @@ internal static class IconExtensions
 {
     public static IntPtr ToHicon(this BitmapSource source)
     {
-        var width = source.PixelWidth;
-        var height = source.PixelHeight;
-        var stride = width * 4;
-        var pixels = new byte[stride * height];
+        int width = source.PixelWidth;
+        int height = source.PixelHeight;
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
         source.CopyPixels(pixels, stride, 0);
-        var info = new BITMAPINFO
+        BITMAPINFO info = new BITMAPINFO
         {
             biSize = 40,
             biWidth = width,
@@ -55,11 +55,11 @@ internal static class IconExtensions
             biPlanes = 1,
             biBitCount = 32
         };
-        var screen = GetDC(IntPtr.Zero);
-        var color = CreateDIBSection(screen, ref info, 0, out var bits, IntPtr.Zero, 0);
+        nint screen = GetDC(IntPtr.Zero);
+        nint color = CreateDIBSection(screen, ref info, 0, out nint bits, IntPtr.Zero, 0);
         Marshal.Copy(pixels, 0, bits, pixels.Length);
-        var mask = CreateBitmap(width, height, 1, 1, IntPtr.Zero);
-        var icon = CreateIconIndirect(new ICONINFO
+        nint mask = CreateBitmap(width, height, 1, 1, IntPtr.Zero);
+        nint icon = CreateIconIndirect(new ICONINFO
         {
             fIcon = 1,
             hbmColor = color,

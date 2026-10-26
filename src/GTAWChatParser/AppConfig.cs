@@ -23,6 +23,8 @@ public sealed class AppConfig
 
     public bool NotificationSoundEnabled { get; set; } = true;
 
+    public string NotificationSoundPath { get; set; } = "";
+
     public int NotificationSeconds { get; set; } = 5;
 
     public bool NotificationCaseSensitive { get; set; }
@@ -64,26 +66,26 @@ public sealed class AppConfig
         Directory.CreateDirectory(AppPaths.Directory);
         if (!File.Exists(AppPaths.ConfigPath))
         {
-            var created = new AppConfig();
+            AppConfig created = new AppConfig();
             created.Save();
             return created;
         }
 
-        var json = File.ReadAllText(AppPaths.ConfigPath);
-        var config = Parse(json);
+        string json = File.ReadAllText(AppPaths.ConfigPath);
+        AppConfig config = Parse(json);
         config.FilePath = AppPaths.ConfigPath;
         return config;
     }
 
     internal static AppConfig Parse(string json)
     {
-        using var document = JsonDocument.Parse(json);
+        using JsonDocument document = JsonDocument.Parse(json);
         if (document.RootElement.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("Settings file is empty.");
 
-        var config = new AppConfig();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var property in document.RootElement.EnumerateObject())
+        AppConfig config = new AppConfig();
+        HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (JsonProperty property in document.RootElement.EnumerateObject())
         {
             if (config.TryApply(property.Name, property.Value))
                 seen.Add(property.Name);
@@ -108,7 +110,7 @@ public sealed class AppConfig
 
         Directory.CreateDirectory(AppPaths.Directory);
         Normalize();
-        var temp = FilePath + ".tmp";
+        string temp = FilePath + ".tmp";
         File.WriteAllText(temp, ToJson());
         File.Move(temp, FilePath, overwrite: true);
         _protectExistingFile = false;
@@ -118,8 +120,8 @@ public sealed class AppConfig
 
     internal string ToJson()
     {
-        var node = JsonSerializer.SerializeToNode(this, SerializerOptions) as JsonObject ?? [];
-        foreach (var extra in _preserved)
+        JsonObject node = JsonSerializer.SerializeToNode(this, SerializerOptions) as JsonObject ?? [];
+        foreach (KeyValuePair<string, JsonNode?> extra in _preserved)
         {
             if (extra.Value != null)
                 node[extra.Key] = extra.Value.DeepClone();
@@ -137,6 +139,7 @@ public sealed class AppConfig
         DevtoolsPort = other.DevtoolsPort;
         NotificationsEnabled = other.NotificationsEnabled;
         NotificationSoundEnabled = other.NotificationSoundEnabled;
+        NotificationSoundPath = NormalizeSoundPath(other.NotificationSoundPath);
         NotificationSeconds = other.ResolvedNotificationSeconds;
         NotificationCaseSensitive = other.NotificationCaseSensitive;
         NotificationAnimation = NotificationMotionExtensions.Format(other.ResolvedNotificationAnimation);
@@ -148,7 +151,7 @@ public sealed class AppConfig
         StartMinimizedToTray = other.StartMinimizedToTray;
         CheckUpdatesOnStartup = other.CheckUpdatesOnStartup;
         _preserved.Clear();
-        foreach (var extra in other._preserved)
+        foreach (KeyValuePair<string, JsonNode?> extra in other._preserved)
         {
             if (extra.Value != null)
                 _preserved[extra.Key] = extra.Value.DeepClone();
@@ -162,6 +165,7 @@ public sealed class AppConfig
             : BackupDirectory;
         NotificationSeconds = ResolvedNotificationSeconds;
         NotificationAnimation = NotificationMotionExtensions.Format(ResolvedNotificationAnimation);
+        NotificationSoundPath = NormalizeSoundPath(NotificationSoundPath);
         Keywords = NormalizeKeywords(Keywords, NotificationCaseSensitive);
         PrimaryColor = HudPalette.NormalizeHex(PrimaryColor, "#E8A838");
         SecondaryColor = HudPalette.NormalizeHex(SecondaryColor, "#0C0E12");
@@ -183,8 +187,8 @@ public sealed class AppConfig
                 case "keywords":
                     if (value.ValueKind != JsonValueKind.Array)
                         return false;
-                    var keywords = new List<string>();
-                    foreach (var item in value.EnumerateArray())
+                    List<string> keywords = new List<string>();
+                    foreach (JsonElement item in value.EnumerateArray())
                     {
                         if (item.ValueKind != JsonValueKind.String)
                             return false;
@@ -194,27 +198,32 @@ public sealed class AppConfig
                     Keywords = keywords;
                     return true;
                 case "devtoolsPort":
-                    if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var port))
+                    if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out int port))
                         return false;
                     DevtoolsPort = port;
                     return true;
                 case "notificationsEnabled":
-                    if (!TryReadBool(value, out var notifications))
+                    if (!TryReadBool(value, out bool notifications))
                         return false;
                     NotificationsEnabled = notifications;
                     return true;
                 case "notificationSoundEnabled":
-                    if (!TryReadBool(value, out var sound))
+                    if (!TryReadBool(value, out bool sound))
                         return false;
                     NotificationSoundEnabled = sound;
                     return true;
+                case "notificationSoundPath":
+                    if (value.ValueKind != JsonValueKind.String)
+                        return false;
+                    NotificationSoundPath = value.GetString() ?? "";
+                    return true;
                 case "notificationSeconds":
-                    if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var seconds))
+                    if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out int seconds))
                         return false;
                     NotificationSeconds = seconds;
                     return true;
                 case "notificationCaseSensitive":
-                    if (!TryReadBool(value, out var caseSensitive))
+                    if (!TryReadBool(value, out bool caseSensitive))
                         return false;
                     NotificationCaseSensitive = caseSensitive;
                     return true;
@@ -244,17 +253,17 @@ public sealed class AppConfig
                     TranscriptFont = value.GetString() ?? TranscriptFont;
                     return true;
                 case "startWithWindows":
-                    if (!TryReadBool(value, out var startWithWindows))
+                    if (!TryReadBool(value, out bool startWithWindows))
                         return false;
                     StartWithWindows = startWithWindows;
                     return true;
                 case "startMinimizedToTray":
-                    if (!TryReadBool(value, out var startMinimized))
+                    if (!TryReadBool(value, out bool startMinimized))
                         return false;
                     StartMinimizedToTray = startMinimized;
                     return true;
                 case "checkUpdatesOnStartup":
-                    if (!TryReadBool(value, out var checkUpdates))
+                    if (!TryReadBool(value, out bool checkUpdates))
                         return false;
                     CheckUpdatesOnStartup = checkUpdates;
                     return true;
@@ -270,7 +279,7 @@ public sealed class AppConfig
 
     private void Keep(string name, JsonElement value)
     {
-        var copy = JsonNode.Parse(value.GetRawText());
+        JsonNode? copy = JsonNode.Parse(value.GetRawText());
         if (copy != null)
             _preserved[name] = copy;
     }
@@ -293,16 +302,22 @@ public sealed class AppConfig
         return false;
     }
 
+    internal static string NormalizeSoundPath(string? path)
+    {
+        string trimmed = path?.Trim() ?? "";
+        return NotificationSounds.IsSupportedFile(trimmed) ? trimmed : "";
+    }
+
     public static List<string> NormalizeKeywords(IEnumerable<string>? keywords, bool caseSensitive = false)
     {
-        var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        var cleaned = new List<string>();
+        StringComparison comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        List<string> cleaned = new List<string>();
         if (keywords == null)
             return cleaned;
 
-        foreach (var keyword in keywords)
+        foreach (string keyword in keywords)
         {
-            var trimmed = keyword.Trim();
+            string trimmed = keyword.Trim();
             if (trimmed.Length == 0)
                 continue;
 

@@ -43,11 +43,11 @@ public sealed class CaptureService : IDisposable
             if (_session == null)
                 return [];
 
-            var lines = new List<string> { ChatLog.CreateHeader(_session.StartedAt) };
-            for (var i = 0; i < _session.Lines.Count; i++)
+            List<string> lines = new List<string> { ChatLog.CreateHeader(_session.StartedAt) };
+            for (int i = 0; i < _session.Lines.Count; i++)
             {
-                var plain = _session.Lines[i];
-                var colored = i < _session.DisplayLines.Count ? _session.DisplayLines[i] : plain;
+                string plain = _session.Lines[i];
+                string colored = i < _session.DisplayLines.Count ? _session.DisplayLines[i] : plain;
                 lines.Add(ChatLog.ForTranscript(plain, colored, keywords, caseSensitive));
             }
 
@@ -68,7 +68,7 @@ public sealed class CaptureService : IDisposable
             startedAt = _session.StartedAt;
         }
 
-        var path = LogArchive.Save(_config.BackupDirectory, startedAt, text);
+        string path = LogArchive.Save(_config.BackupDirectory, startedAt, text);
         lock (_gate)
         {
             _lastSavedPath = path;
@@ -83,12 +83,12 @@ public sealed class CaptureService : IDisposable
     {
         RecoverClosedGame();
 
-        var previous = new List<string>();
-        var baselineTaken = false;
+        List<string> previous = new List<string>();
+        bool baselineTaken = false;
         DateTime? missingSince = null;
-        var lastArchive = DateTime.UtcNow;
+        DateTime lastArchive = DateTime.UtcNow;
         string? lastQuietMessage = null;
-        var lastQuietAt = DateTime.MinValue;
+        DateTime lastQuietAt = DateTime.MinValue;
 
         if (GameProcess.IsGameRunning() && TryResumeJournal())
         {
@@ -102,7 +102,7 @@ public sealed class CaptureService : IDisposable
             lastArchive = DateTime.UtcNow;
             try
             {
-                var recovered = SaveNow();
+                string? recovered = SaveNow();
                 if (recovered != null)
                     LogSaved?.Invoke(recovered, false);
             }
@@ -146,28 +146,28 @@ public sealed class CaptureService : IDisposable
                     continue;
                 }
 
-                var visible = await _reader.ReadLinesAsync(cancellationToken).ConfigureAwait(false);
+                IReadOnlyList<CapturedLine> visible = await _reader.ReadLinesAsync(cancellationToken).ConfigureAwait(false);
                 missingSince = null;
                 if (visible.Count > 0)
                 {
-                var capturedAt = DateTime.UtcNow;
-                var plainVisible = visible.Select(line => line.Plain).ToList();
-                var overlap = ChatLog.FindOverlap(previous, plainVisible);
-                var fresh = visible.Skip(overlap).ToList();
+                DateTime capturedAt = DateTime.UtcNow;
+                List<string> plainVisible = visible.Select(line => line.Plain).ToList();
+                int overlap = ChatLog.FindOverlap(previous, plainVisible);
+                List<CapturedLine> fresh = visible.Skip(overlap).ToList();
                 previous = plainVisible;
 
                 if (fresh.Count > 0)
                 {
-                    var notify = baselineTaken || fresh.Count <= 3;
-                    var formatted = new List<string>();
-                    var colored = new List<string>();
-                    foreach (var line in fresh)
+                    bool notify = baselineTaken || fresh.Count <= 3;
+                    List<string> formatted = new List<string>();
+                    List<string> colored = new List<string>();
+                    foreach (CapturedLine line in fresh)
                     {
-                        var plain = ChatLog.FormatLine(line.Plain, capturedAt);
+                        string plain = ChatLog.FormatLine(line.Plain, capturedAt);
                         if (plain.Length == 0)
                             continue;
 
-                        var withColor = ChatLog.FormatLine(line.Colored, capturedAt);
+                        string withColor = ChatLog.FormatLine(line.Colored, capturedAt);
                         if (_logLines.ClaimDom(plain))
                         {
                             lock (_gate)
@@ -179,7 +179,7 @@ public sealed class CaptureService : IDisposable
                         colored.Add(withColor.Length == 0 ? plain : withColor);
                     }
 
-                    var startedNew = false;
+                    bool startedNew = false;
                     lock (_gate)
                     {
                         if (formatted.Count > 0 && _session == null)
@@ -214,8 +214,8 @@ public sealed class CaptureService : IDisposable
                     }
                 }
 
-                var coloredVisible = new List<string>(visible.Count);
-                foreach (var line in visible)
+                List<string> coloredVisible = new List<string>(visible.Count);
+                foreach (CapturedLine line in visible)
                     coloredVisible.Add(ChatLog.FormatLine(line.Colored, capturedAt));
 
                 lock (_gate)
@@ -226,7 +226,7 @@ public sealed class CaptureService : IDisposable
                 SetStatus(HasSession() ? $"Capturing · {LineCount()} lines" : "Waiting for GTAW chat");
                 if (IsDirty() && DateTime.UtcNow - lastArchive >= ArchiveInterval)
                 {
-                    var path = SaveNow();
+                    string? path = SaveNow();
                     lastArchive = DateTime.UtcNow;
                     if (path != null)
                     {
@@ -263,7 +263,7 @@ public sealed class CaptureService : IDisposable
                     continue;
                 }
 
-                var message = exception.Message;
+                string message = exception.Message;
                 if (!string.Equals(message, lastQuietMessage, StringComparison.Ordinal) || DateTime.UtcNow - lastQuietAt > TimeSpan.FromSeconds(30))
                 {
                     lastQuietMessage = message;
@@ -271,7 +271,7 @@ public sealed class CaptureService : IDisposable
                     AppLog.Info("Waiting for GTAW chat: " + message);
                 }
 
-                var searching = (presence.ClientRunning || presence.GameRunning) && ShouldSearchPort(exception);
+                bool searching = (presence.ClientRunning || presence.GameRunning) && ShouldSearchPort(exception);
                 SetStatus(HasSession()
                     ? $"Capturing · {LineCount()} lines"
                     : searching ? "Looking for GTAW chat" : "Waiting for GTAW chat");
@@ -306,10 +306,10 @@ public sealed class CaptureService : IDisposable
 
         try
         {
-            var session = ChatSession.TryLoad(File.ReadAllText(AppPaths.JournalPath));
+            ChatSession? session = ChatSession.TryLoad(File.ReadAllText(AppPaths.JournalPath));
             if (session is { Lines.Count: > 0 })
             {
-                var path = LogArchive.Save(_config.BackupDirectory, session.StartedAt, session.ToFileText());
+                string path = LogArchive.Save(_config.BackupDirectory, session.StartedAt, session.ToFileText());
                 lock (_gate)
                     _lastSavedPath = path;
                 AppLog.Info($"Recovered session {path}");
@@ -333,7 +333,7 @@ public sealed class CaptureService : IDisposable
 
         try
         {
-            var session = ChatSession.TryLoad(File.ReadAllText(AppPaths.JournalPath));
+            ChatSession? session = ChatSession.TryLoad(File.ReadAllText(AppPaths.JournalPath));
             if (session == null || session.Lines.Count == 0)
             {
                 DeleteJournal();
@@ -357,22 +357,22 @@ public sealed class CaptureService : IDisposable
     {
         try
         {
-            if (!_gameLog.TryRead(out var header, out var logLines))
+            if (!_gameLog.TryRead(out string header, out IReadOnlyList<string> logLines))
                 return;
 
             List<string> sessionLines;
             lock (_gate)
                 sessionLines = _session == null ? [] : [.. _session.Lines];
 
-            var extras = _logLines.Take(header, logLines, sessionLines);
+            List<string> extras = _logLines.Take(header, logLines, sessionLines);
             if (extras.Count == 0)
                 return;
 
-            var capturedAt = DateTime.UtcNow;
-            var formatted = new List<string>(extras.Count);
-            foreach (var line in extras)
+            DateTime capturedAt = DateTime.UtcNow;
+            List<string> formatted = new List<string>(extras.Count);
+            foreach (string line in extras)
             {
-                var plain = ChatLog.FormatLine(line, capturedAt);
+                string plain = ChatLog.FormatLine(line, capturedAt);
                 if (plain.Length > 0)
                     formatted.Add(plain);
             }
@@ -380,7 +380,7 @@ public sealed class CaptureService : IDisposable
             if (formatted.Count == 0)
                 return;
 
-            var startedNew = false;
+            bool startedNew = false;
             lock (_gate)
             {
                 if (_session == null)
@@ -459,7 +459,7 @@ public sealed class CaptureService : IDisposable
         try
         {
             Directory.CreateDirectory(AppPaths.Directory);
-            var temp = AppPaths.JournalPath + ".tmp";
+            string temp = AppPaths.JournalPath + ".tmp";
             File.WriteAllText(temp, text, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.Move(temp, AppPaths.JournalPath, overwrite: true);
         }
@@ -509,7 +509,7 @@ public sealed class CaptureService : IDisposable
         int found;
         try
         {
-            var port = await InspectorLocator.FindAsync(_config.ResolvedDevtoolsPort, cancellationToken).ConfigureAwait(false);
+            int? port = await InspectorLocator.FindAsync(_config.ResolvedDevtoolsPort, cancellationToken).ConfigureAwait(false);
             if (port == null)
                 return;
             found = port.Value;
@@ -543,7 +543,7 @@ public sealed class CaptureService : IDisposable
 
     private static bool ShouldSearchPort(Exception exception)
     {
-        var message = exception.Message;
+        string message = exception.Message;
         if (message.Contains("still loading", StringComparison.OrdinalIgnoreCase))
             return false;
         if (message.Contains("rejected the read", StringComparison.OrdinalIgnoreCase))

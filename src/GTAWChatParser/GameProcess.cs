@@ -13,7 +13,7 @@ public static class GameProcess
 
     public static GamePresence Query()
     {
-        var presence = new GamePresence(false, false);
+        GamePresence presence = new GamePresence(false, false);
         Process[] processes;
         try
         {
@@ -26,13 +26,13 @@ public static class GameProcess
 
         try
         {
-            foreach (var process in processes)
+            foreach (Process process in processes)
             {
                 try
                 {
-                    var name = process.ProcessName;
-                    var client = IsClientProcessName(name);
-                    var game = IsGameProcessName(name);
+                    string name = process.ProcessName;
+                    bool client = IsClientProcessName(name);
+                    bool game = IsGameProcessName(name);
                     if (client || game)
                         presence = new GamePresence(presence.ClientRunning || client, presence.GameRunning || game);
                 }
@@ -43,7 +43,7 @@ public static class GameProcess
         }
         finally
         {
-            foreach (var process in processes)
+            foreach (Process process in processes)
                 process.Dispose();
         }
 
@@ -52,18 +52,18 @@ public static class GameProcess
 
     public static bool IsFiveMFocused()
     {
-        var handle = GetForegroundWindow();
+        nint handle = GetForegroundWindow();
         if (handle == IntPtr.Zero)
             return false;
 
-        _ = GetWindowThreadProcessId(handle, out var processId);
+        _ = GetWindowThreadProcessId(handle, out uint processId);
         if (processId == 0)
             return false;
 
         try
         {
-            using var process = Process.GetProcessById((int)processId);
-            var name = process.ProcessName;
+            using Process process = Process.GetProcessById((int)processId);
+            string name = process.ProcessName;
             return IsGameProcessName(name) || name.StartsWith("FiveM", StringComparison.OrdinalIgnoreCase);
         }
         catch
@@ -80,7 +80,7 @@ public static class GameProcess
 
     internal static HashSet<int> ClientProcessIds()
     {
-        var ids = new HashSet<int>();
+        HashSet<int> ids = new HashSet<int>();
         Process[] processes;
         try
         {
@@ -93,7 +93,7 @@ public static class GameProcess
 
         try
         {
-            foreach (var process in processes)
+            foreach (Process process in processes)
             {
                 try
                 {
@@ -107,7 +107,7 @@ public static class GameProcess
         }
         finally
         {
-            foreach (var process in processes)
+            foreach (Process process in processes)
                 process.Dispose();
         }
 

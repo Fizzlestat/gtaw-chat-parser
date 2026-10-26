@@ -1,4 +1,5 @@
 using System.Text.Json;
+using NAudio.Wave;
 using Xunit;
 
 namespace GTAWChatParser.Tests;
@@ -8,7 +9,7 @@ public class AppConfigTests
     [Fact]
     public void Older_file_keeps_keywords_and_fills_in_settings_that_were_added_later()
     {
-        var config = AppConfig.Parse("""
+        AppConfig config = AppConfig.Parse("""
             {
               "backupDirectory": "C:\\Logs",
               "keywords": [ "Alex", "Selene Watson" ],
@@ -24,7 +25,7 @@ public class AppConfigTests
         Assert.True(config.CheckUpdatesOnStartup);
         Assert.Equal(5, config.NotificationSeconds);
 
-        var saved = JsonDocument.Parse(config.ToJson()).RootElement;
+        JsonElement saved = JsonDocument.Parse(config.ToJson()).RootElement;
         Assert.Equal("Alex", saved.GetProperty("keywords")[0].GetString());
         Assert.Equal("pop", saved.GetProperty("notificationAnimation").GetString());
         Assert.True(saved.GetProperty("startWithWindows").GetBoolean());
@@ -34,7 +35,7 @@ public class AppConfigTests
     [Fact]
     public void Saving_keeps_settings_this_version_does_not_know_about()
     {
-        var config = AppConfig.Parse("""
+        AppConfig config = AppConfig.Parse("""
             {
               "keywords": [ "Alex" ],
               "notificationAnimation": "pop",
@@ -44,7 +45,7 @@ public class AppConfigTests
             """);
 
         config.NotificationSeconds = 8;
-        var saved = JsonDocument.Parse(config.ToJson()).RootElement;
+        JsonElement saved = JsonDocument.Parse(config.ToJson()).RootElement;
         Assert.Equal("Alex", saved.GetProperty("keywords")[0].GetString());
         Assert.Equal("pop", saved.GetProperty("notificationAnimation").GetString());
         Assert.False(saved.GetProperty("startMinimizedToTray").GetBoolean());
@@ -55,26 +56,88 @@ public class AppConfigTests
     [Fact]
     public void A_value_this_version_cannot_read_is_left_in_the_file()
     {
-        var config = AppConfig.Parse("""
+        AppConfig config = AppConfig.Parse("""
             {
               "keywords": [ "Alex" ],
               "notificationSeconds": "forever"
             }
             """);
 
-        var saved = JsonDocument.Parse(config.ToJson()).RootElement;
+        JsonElement saved = JsonDocument.Parse(config.ToJson()).RootElement;
         Assert.Equal("Alex", saved.GetProperty("keywords")[0].GetString());
         Assert.Equal("forever", saved.GetProperty("notificationSeconds").GetString());
+    }
+
+    [Theory]
+    [InlineData(@"C:\Sounds\alert.mp3", true)]
+    [InlineData(@"C:\Sounds\alert.WAV", true)]
+    [InlineData(@"C:\Sounds\alert.ogg", true)]
+    [InlineData(@"C:\Sounds\alert.txt", false)]
+    [InlineData("", false)]
+    public void Only_mp3_wav_and_ogg_can_be_notification_sounds(string path, bool supported)
+    {
+        Assert.Equal(supported, NotificationSounds.IsSupportedFile(path));
+    }
+
+    [Fact]
+    public void Custom_sound_path_is_saved_with_the_other_settings()
+    {
+        AppConfig config = AppConfig.Parse("""
+            {
+              "keywords": [ "Alex" ],
+              "notificationSoundPath": "C:\\Sounds\\alert.ogg"
+            }
+            """);
+
+        Assert.Equal(@"C:\Sounds\alert.ogg", config.NotificationSoundPath);
+        JsonElement saved = JsonDocument.Parse(config.ToJson()).RootElement;
+        Assert.Equal("Alex", saved.GetProperty("keywords")[0].GetString());
+        Assert.Equal(@"C:\Sounds\alert.ogg", saved.GetProperty("notificationSoundPath").GetString());
+    }
+
+    [Theory]
+    [InlineData(2, false)]
+    [InlineData(2.25, true)]
+    public void Sounds_longer_than_two_seconds_are_rejected(double seconds, bool tooLong)
+    {
+        string path = Path.Combine(Path.GetTempPath(), "gtaw-sound-" + Guid.NewGuid().ToString("N") + ".wav");
+        try
+        {
+            WaveFormat format = new WaveFormat(8000, 16, 1);
+            int count = (int)Math.Round(format.AverageBytesPerSecond * seconds);
+            count -= count % format.BlockAlign;
+            using (WaveFileWriter writer = new WaveFileWriter(path, format))
+                writer.Write(new byte[count], 0, count);
+
+            Assert.Equal(tooLong, NotificationSounds.IsLongerThanLimit(path));
+            bool opened = NotificationSounds.TryOpen(path, out _, out IDisposable? source);
+            source?.Dispose();
+            Assert.Equal(!tooLong, opened);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void An_unsupported_sound_path_is_cleared()
+    {
+        AppConfig config = AppConfig.Parse("""
+            { "notificationSoundPath": "C:\\Sounds\\alert.flac" }
+            """);
+
+        Assert.Equal("", config.NotificationSoundPath);
     }
 
     [Fact]
     public void A_file_that_cannot_be_read_is_not_replaced()
     {
-        var path = Path.Combine(Path.GetTempPath(), "gtaw-config-" + Guid.NewGuid().ToString("N") + ".json");
+        string path = Path.Combine(Path.GetTempPath(), "gtaw-config-" + Guid.NewGuid().ToString("N") + ".json");
         File.WriteAllText(path, "{ not json");
         try
         {
-            var config = new AppConfig { FilePath = path };
+            AppConfig config = new AppConfig { FilePath = path };
             config.ProtectExistingFile();
             config.Keywords = ["Alex"];
             config.Save();

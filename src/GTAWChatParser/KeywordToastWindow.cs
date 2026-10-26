@@ -22,7 +22,7 @@ internal sealed class KeywordToastWindow : Window
     private NotificationMotion _motion = NotificationMotion.Slide;
     private double _slotHeight;
 
-    private KeywordToastWindow(string line, NotificationMotion motion, int holdMs)
+    private KeywordToastWindow(string title, string line, NotificationMotion motion, int holdMs)
     {
         _motion = motion;
         _holdMs = holdMs;
@@ -35,14 +35,14 @@ internal sealed class KeywordToastWindow : Window
         Background = Brushes.Transparent;
         Cursor = Cursors.Hand;
 
-        var title = new TextBlock
+        TextBlock heading = new TextBlock
         {
-            Text = "Keyword Notification",
+            Text = title,
             FontWeight = FontWeights.SemiBold,
             Foreground = FindBrush("FrameBrush"),
             FontSize = 13
         };
-        var body = new TextBlock
+        TextBlock body = new TextBlock
         {
             Text = line,
             Foreground = FindBrush("LineBrush"),
@@ -52,8 +52,8 @@ internal sealed class KeywordToastWindow : Window
             TextTrimming = TextTrimming.CharacterEllipsis
         };
         body.Measure(new Size(MaxToastWidth - 48, double.PositiveInfinity));
-        var width = Math.Clamp(Math.Max(180, body.DesiredSize.Width + 48), 220, MaxToastWidth);
-        var height = 18 + title.FontSize + 8 + Math.Min(96, body.DesiredSize.Height) + 22;
+        double width = Math.Clamp(Math.Max(180, body.DesiredSize.Width + 48), 220, MaxToastWidth);
+        double height = 18 + heading.FontSize + 8 + Math.Min(96, body.DesiredSize.Height) + 22;
         Width = width;
         Height = height;
         _slotHeight = height;
@@ -69,11 +69,11 @@ internal sealed class KeywordToastWindow : Window
             RenderTransform = new ScaleTransform(1, 1)
         };
 
-        var stack = new StackPanel { Margin = new Thickness(16, 10, 16, 12) };
-        stack.Children.Add(title);
+        StackPanel stack = new StackPanel { Margin = new Thickness(16, 10, 16, 12) };
+        stack.Children.Add(heading);
         stack.Children.Add(body);
         stack.Children.Add(_progress);
-        var card = new Border
+        Border card = new Border
         {
             Background = FindBrush("CardBrush"),
             CornerRadius = new CornerRadius(10),
@@ -81,7 +81,7 @@ internal sealed class KeywordToastWindow : Window
         };
         Content = card;
 
-        var group = new TransformGroup();
+        TransformGroup group = new TransformGroup();
         group.Children.Add(_scale);
         group.Children.Add(_slide);
         card.RenderTransform = group;
@@ -103,38 +103,49 @@ internal sealed class KeywordToastWindow : Window
         _clock.Tick += (_, _) => Step();
     }
 
-    public static void ShowMatches(IReadOnlyList<(string Keywords, string Line)> hits, int seconds, NotificationMotion motion, bool playSound)
+    public static void ShowMatches(IReadOnlyList<(string Keywords, string Line)> hits, int seconds, NotificationMotion motion, bool playSound, string? soundPath)
     {
         if (hits.Count == 0)
             return;
 
-        var holdMs = Math.Clamp(seconds, 1, 60) * 1000;
-        foreach (var (_, line) in hits.Take(3))
-        {
-            KeywordToastWindow? oldest = null;
-            lock (OpenToasts)
-            {
-                if (OpenToasts.Count >= 3)
-                    oldest = OpenToasts[0];
-            }
-
-            oldest?.Close();
-            var toast = new KeywordToastWindow(line, motion, holdMs);
-            toast.Closed += (_, _) =>
-            {
-                lock (OpenToasts)
-                    OpenToasts.Remove(toast);
-                Reflow();
-            };
-            lock (OpenToasts)
-                OpenToasts.Add(toast);
-            Reflow();
-            toast.Show();
-            toast.BeginEnter();
-        }
+        int holdMs = Math.Clamp(seconds, 1, 60) * 1000;
+        foreach ((string _, string line) in hits.Take(3))
+            ShowToast("Keyword Notification", line, motion, holdMs);
 
         if (playSound)
-            NotificationPing.Play();
+            NotificationPing.Play(soundPath, fallbackToDefault: true);
+    }
+
+    public static void ShowSavedLog(string path, int seconds, NotificationMotion motion, bool playSound, string? soundPath)
+    {
+        string name = Path.GetFileName(path);
+        ShowToast("Log saved", string.IsNullOrWhiteSpace(name) ? "Chat log saved." : name, motion, Math.Clamp(seconds, 1, 60) * 1000);
+        if (playSound)
+            NotificationPing.Play(soundPath, fallbackToDefault: true);
+    }
+
+    private static void ShowToast(string title, string line, NotificationMotion motion, int holdMs)
+    {
+        KeywordToastWindow? oldest = null;
+        lock (OpenToasts)
+        {
+            if (OpenToasts.Count >= 3)
+                oldest = OpenToasts[0];
+        }
+
+        oldest?.Close();
+        KeywordToastWindow toast = new KeywordToastWindow(title, line, motion, holdMs);
+        toast.Closed += (_, _) =>
+        {
+            lock (OpenToasts)
+                OpenToasts.Remove(toast);
+            Reflow();
+        };
+        lock (OpenToasts)
+            OpenToasts.Add(toast);
+        Reflow();
+        toast.Show();
+        toast.BeginEnter();
     }
 
     public static void CloseAll()
@@ -142,7 +153,7 @@ internal sealed class KeywordToastWindow : Window
         KeywordToastWindow[] snapshot;
         lock (OpenToasts)
             snapshot = OpenToasts.ToArray();
-        foreach (var toast in snapshot)
+        foreach (KeywordToastWindow toast in snapshot)
             toast.Close();
     }
 
@@ -184,16 +195,16 @@ internal sealed class KeywordToastWindow : Window
 
     private void Step()
     {
-        var elapsed = Environment.TickCount64 - _phaseStart;
+        long elapsed = Environment.TickCount64 - _phaseStart;
         if (!_leaving)
         {
-            var enter = Math.Clamp(elapsed / 280.0, 0, 1);
-            var eased = 1 - Math.Pow(1 - enter, 3);
+            double enter = Math.Clamp(elapsed / 280.0, 0, 1);
+            double eased = 1 - Math.Pow(1 - enter, 3);
             if (_motion == NotificationMotion.Pop)
             {
                 Opacity = eased;
                 _slide.X = 0;
-                var scale = 0.62 + 0.38 * eased;
+                double scale = 0.62 + 0.38 * eased;
                 _scale.ScaleX = scale;
                 _scale.ScaleY = scale;
             }
@@ -202,7 +213,7 @@ internal sealed class KeywordToastWindow : Window
                 _slide.X = Width * (1 - eased);
             }
 
-            var remain = 1 - Math.Clamp((elapsed - (_motion == NotificationMotion.None ? 0 : 280)) / (double)_holdMs, 0, 1);
+            double remain = 1 - Math.Clamp((elapsed - (_motion == NotificationMotion.None ? 0 : 280)) / (double)_holdMs, 0, 1);
             if (_progress.RenderTransform is ScaleTransform bar)
                 bar.ScaleX = Math.Max(0, remain);
             if (elapsed >= (_motion == NotificationMotion.None ? 0 : 280) + _holdMs)
@@ -216,12 +227,12 @@ internal sealed class KeywordToastWindow : Window
             return;
         }
 
-        var leave = Math.Clamp(elapsed / 140.0, 0, 1);
-        var leaveEased = leave * leave;
+        double leave = Math.Clamp(elapsed / 140.0, 0, 1);
+        double leaveEased = leave * leave;
         if (_motion == NotificationMotion.Pop)
         {
             Opacity = 1 - leaveEased;
-            var scale = 1 - 0.2 * leaveEased;
+            double scale = 1 - 0.2 * leaveEased;
             _scale.ScaleX = scale;
             _scale.ScaleY = scale;
         }
@@ -240,11 +251,11 @@ internal sealed class KeywordToastWindow : Window
         lock (OpenToasts)
             snapshot = OpenToasts.ToList();
 
-        var area = WorkArea();
-        var y = area.Bottom - Edge;
-        for (var i = snapshot.Count - 1; i >= 0; i--)
+        Rect area = WorkArea();
+        double y = area.Bottom - Edge;
+        for (int i = snapshot.Count - 1; i >= 0; i--)
         {
-            var toast = snapshot[i];
+            KeywordToastWindow toast = snapshot[i];
             y -= toast._slotHeight;
             toast.Left = area.Right - toast.Width - Edge;
             toast.Top = y;
@@ -254,12 +265,12 @@ internal sealed class KeywordToastWindow : Window
 
     private static Rect WorkArea()
     {
-        var point = GetCursorPos(out var cursor) ? cursor : default;
-        var monitor = MonitorFromPoint(point, 2);
-        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        POINT point = GetCursorPos(out POINT cursor) ? cursor : default;
+        nint monitor = MonitorFromPoint(point, 2);
+        MONITORINFO info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
         if (monitor != IntPtr.Zero && GetMonitorInfo(monitor, ref info))
         {
-            var work = info.rcWork;
+            RECT work = info.rcWork;
             return new Rect(work.Left, work.Top, work.Right - work.Left, work.Bottom - work.Top);
         }
 

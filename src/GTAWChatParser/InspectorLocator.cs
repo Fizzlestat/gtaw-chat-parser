@@ -16,8 +16,8 @@ internal static class InspectorLocator
 
     public static async Task<int?> FindAsync(int preferred, CancellationToken cancellationToken)
     {
-        var ports = CandidatePorts(preferred);
-        var found = new List<int>();
+        List<int> ports = CandidatePorts(preferred);
+        List<int> found = new List<int>();
         await Parallel.ForEachAsync(ports, new ParallelOptions
         {
             MaxDegreeOfParallelism = 4,
@@ -49,13 +49,13 @@ internal static class InspectorLocator
     {
         try
         {
-            using var document = JsonDocument.Parse(json);
+            using JsonDocument document = JsonDocument.Parse(json);
             if (document.RootElement.ValueKind != JsonValueKind.Array)
                 return false;
 
-            foreach (var target in document.RootElement.EnumerateArray())
+            foreach (JsonElement target in document.RootElement.EnumerateArray())
             {
-                if (target.TryGetProperty("url", out var url) &&
+                if (target.TryGetProperty("url", out JsonElement url) &&
                     string.Equals(url.GetString(), NuiChatClient.RootUiUrl, StringComparison.Ordinal))
                 {
                     return true;
@@ -72,15 +72,15 @@ internal static class InspectorLocator
 
     private static List<int> CandidatePorts(int preferred)
     {
-        var ports = new HashSet<int> { 13172 };
+        HashSet<int> ports = new HashSet<int> { 13172 };
         if (preferred is > 0 and <= 65535)
             ports.Add(preferred);
 
-        var clientIds = GameProcess.ClientProcessIds();
+        HashSet<int> clientIds = GameProcess.ClientProcessIds();
         if (clientIds.Count == 0)
             return ports.OrderBy(port => port == preferred ? 0 : 1).ToList();
 
-        foreach (var (pid, port, address) in ListeningPorts())
+        foreach ((int pid, int port, uint address) in ListeningPorts())
         {
             if (port is < 1 or > 65535)
                 continue;
@@ -97,9 +97,9 @@ internal static class InspectorLocator
     {
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromMilliseconds(800));
-            var json = await Http.GetStringAsync($"http://127.0.0.1:{port}/json", timeout.Token).ConfigureAwait(false);
+            string json = await Http.GetStringAsync($"http://127.0.0.1:{port}/json", timeout.Token).ConfigureAwait(false);
             return ContainsRootUi(json);
         }
         catch (Exception exception) when (exception is HttpRequestException or SocketException or TaskCanceledException or JsonException or IOException)
@@ -110,25 +110,25 @@ internal static class InspectorLocator
 
     private static List<(int Pid, int Port, uint Address)> ListeningPorts()
     {
-        var size = 0;
+        int size = 0;
         _ = GetExtendedTcpTable(IntPtr.Zero, ref size, true, AfInet, TcpTableClass.OwnerPidListener, 0);
         if (size <= 0)
             return [];
 
-        var buffer = Marshal.AllocHGlobal(size);
+        nint buffer = Marshal.AllocHGlobal(size);
         try
         {
-            var result = GetExtendedTcpTable(buffer, ref size, true, AfInet, TcpTableClass.OwnerPidListener, 0);
+            uint result = GetExtendedTcpTable(buffer, ref size, true, AfInet, TcpTableClass.OwnerPidListener, 0);
             if (result != 0)
                 return [];
 
-            var count = Marshal.ReadInt32(buffer);
-            var rowSize = Marshal.SizeOf<TcpRow>();
-            var rows = new List<(int, int, uint)>(count);
-            var offset = 4;
-            for (var i = 0; i < count; i++)
+            int count = Marshal.ReadInt32(buffer);
+            int rowSize = Marshal.SizeOf<TcpRow>();
+            List<(int, int, uint)> rows = new List<(int, int, uint)>(count);
+            int offset = 4;
+            for (int i = 0; i < count; i++)
             {
-                var row = Marshal.PtrToStructure<TcpRow>(buffer + offset);
+                TcpRow row = Marshal.PtrToStructure<TcpRow>(buffer + offset);
                 offset += rowSize;
                 rows.Add((row.OwningPid, PortFromNetworkOrder(row.LocalPort), row.LocalAddr));
             }

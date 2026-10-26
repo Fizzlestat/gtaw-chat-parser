@@ -22,7 +22,7 @@ public static class AppLog
         try
         {
             Directory.CreateDirectory(AppPaths.Directory);
-            var line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {level} {message}{Environment.NewLine}";
+            string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {level} {message}{Environment.NewLine}";
             lock (Gate)
                 File.AppendAllText(AppPaths.LogPath, line);
         }

@@ -12,15 +12,15 @@ public static class LogArchive
         if (string.IsNullOrWhiteSpace(backupDirectory))
             throw new ArgumentException("A log folder is required.", nameof(backupDirectory));
 
-        var culture = CultureInfo.InvariantCulture;
-        var directory = Path.Combine(
+        CultureInfo culture = CultureInfo.InvariantCulture;
+        string directory = Path.Combine(
             backupDirectory,
             startedAt.ToString("yyyy", culture),
             startedAt.ToString("MMM", culture).ToUpperInvariant());
         Directory.CreateDirectory(directory);
 
-        var fileName = startedAt.ToString("dd.MMM.yyyy-HH.mm.ss", culture).ToUpperInvariant() + ".txt";
-        var destination = Path.Combine(directory, fileName);
+        string fileName = startedAt.ToString("dd.MMM.yyyy-HH.mm.ss", culture).ToUpperInvariant() + ".txt";
+        string destination = Path.Combine(directory, fileName);
 
         if (!File.Exists(destination))
         {
@@ -28,7 +28,7 @@ public static class LogArchive
             return destination;
         }
 
-        var temp = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        string temp = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
         File.WriteAllText(temp, content, Utf8NoBom);
         try
         {
@@ -46,7 +46,7 @@ public static class LogArchive
 
     private static void WriteAtomic(string path, string content)
     {
-        var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         File.WriteAllText(temp, content, Utf8NoBom);
         File.Move(temp, path, overwrite: true);
     }

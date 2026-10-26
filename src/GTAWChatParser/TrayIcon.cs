@@ -52,7 +52,7 @@ internal sealed class TrayIcon : IDisposable
         _source?.RemoveHook(WndProc);
         if (_added && _hwnd != IntPtr.Zero)
         {
-            var data = CreateData();
+            NOTIFYICONDATA data = CreateData();
             Shell_NotifyIcon(NIM_DELETE, ref data);
             _added = false;
         }
@@ -63,7 +63,7 @@ internal sealed class TrayIcon : IDisposable
         if (_hwnd == IntPtr.Zero)
             return;
 
-        var data = CreateData();
+        NOTIFYICONDATA data = CreateData();
         if (_wantVisible && !_added)
             _added = Shell_NotifyIcon(NIM_ADD, ref data);
         else if (!_wantVisible && _added)
@@ -89,7 +89,7 @@ internal sealed class TrayIcon : IDisposable
         if (msg != WM_TRAY)
             return IntPtr.Zero;
 
-        var click = lParam.ToInt32() & 0xFFFF;
+        int click = lParam.ToInt32() & 0xFFFF;
         if (click == WM_LBUTTONUP)
         {
             OpenRequested?.Invoke();
@@ -98,13 +98,13 @@ internal sealed class TrayIcon : IDisposable
         else if (click == WM_RBUTTONUP)
         {
             SetForegroundWindow(_hwnd);
-            var menu = new ContextMenu
+            ContextMenu menu = new ContextMenu
             {
                 Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint,
                 PlacementTarget = _window
             };
-            var open = new MenuItem { Header = "Open" };
-            var exit = new MenuItem { Header = "Exit" };
+            MenuItem open = new MenuItem { Header = "Open" };
+            MenuItem exit = new MenuItem { Header = "Exit" };
             open.Click += (_, _) => OpenRequested?.Invoke();
             exit.Click += (_, _) => ExitRequested?.Invoke();
             menu.Items.Add(open);

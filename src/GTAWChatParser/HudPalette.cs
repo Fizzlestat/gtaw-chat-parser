@@ -12,10 +12,10 @@ internal static class HudPalette
 
     public static void Apply(AppConfig config)
     {
-        var primary = Parse(config.PrimaryColor, Parse(DefaultPrimary, Colors.Goldenrod));
-        var secondary = Parse(config.SecondaryColor, Parse(DefaultSecondary, Colors.Black));
-        var dark = Luminance(secondary) < 0.45;
-        var resources = Application.Current.Resources;
+        Color primary = Parse(config.PrimaryColor, Parse(DefaultPrimary, Colors.Goldenrod));
+        Color secondary = Parse(config.SecondaryColor, Parse(DefaultSecondary, Colors.Black));
+        bool dark = Luminance(secondary) < 0.45;
+        ResourceDictionary resources = Application.Current.Resources;
 
         Put(resources, "FrameBrush", primary);
         Put(resources, "FrameHoverBrush", Shift(primary, dark ? 0.22 : -0.12));
@@ -34,7 +34,7 @@ internal static class HudPalette
         Put(resources, "ButtonHoverBrush", Shift(secondary, dark ? 0.23 : -0.14));
         Put(resources, "ButtonPressedBrush", Shift(secondary, dark ? 0.08 : -0.18));
 
-        var text = dark ? Color.FromRgb(0xEC, 0xE8, 0xDF) : Color.FromRgb(0x16, 0x18, 0x1E);
+        Color text = dark ? Color.FromRgb(0xEC, 0xE8, 0xDF) : Color.FromRgb(0x16, 0x18, 0x1E);
         Put(resources, "TextBrush", text);
         Put(resources, "MutedBrush", Mix(text, secondary, 0.42));
         Put(resources, "LineBrush", Mix(text, secondary, dark ? 0.16 : 0.28));
@@ -49,13 +49,13 @@ internal static class HudPalette
 
     public static string NormalizeHex(string? value, string fallback)
     {
-        return TryParse(value, out var color) ? Format(color) : fallback;
+        return TryParse(value, out Color color) ? Format(color) : fallback;
     }
 
     public static string NormalizeFont(string? value, string fallback)
     {
-        var requested = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-        foreach (var family in Fonts.SystemFontFamilies)
+        string requested = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        foreach (FontFamily? family in Fonts.SystemFontFamilies)
         {
             if (string.Equals(family.Source, requested, StringComparison.OrdinalIgnoreCase))
                 return family.Source;
@@ -70,14 +70,14 @@ internal static class HudPalette
         if (string.IsNullOrWhiteSpace(value))
             return false;
 
-        var text = value.Trim();
+        string text = value.Trim();
         if (text.StartsWith('#'))
             text = text[1..];
 
         if (text.Length == 3)
             text = string.Concat(text.Select(character => $"{character}{character}"));
 
-        if (text.Length != 6 || !uint.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var rgb))
+        if (text.Length != 6 || !uint.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint rgb))
             return false;
 
         color = Color.FromRgb((byte)((rgb >> 16) & 0xFF), (byte)((rgb >> 8) & 0xFF), (byte)(rgb & 0xFF));
@@ -97,7 +97,7 @@ internal static class HudPalette
         resources[key] = new SolidColorBrush(color);
     }
 
-    private static Color Parse(string? value, Color fallback) => TryParse(value, out var color) ? color : fallback;
+    private static Color Parse(string? value, Color fallback) => TryParse(value, out Color color) ? color : fallback;
 
     private static double Luminance(Color color) => ((0.2126 * color.R) + (0.7152 * color.G) + (0.0722 * color.B)) / 255.0;
 

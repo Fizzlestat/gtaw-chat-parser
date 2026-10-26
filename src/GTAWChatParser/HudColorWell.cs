@@ -24,9 +24,9 @@ internal sealed class HudColorWell : UserControl
 
     public HudColorWell()
     {
-        var root = new StackPanel();
+        StackPanel root = new StackPanel();
 
-        var planeBorder = new Border
+        Border planeBorder = new Border
         {
             Height = 136,
             BorderThickness = new Thickness(1),
@@ -38,7 +38,7 @@ internal sealed class HudColorWell : UserControl
         _planeHost = new Grid();
         _planeImage = new Image { Stretch = Stretch.Fill, SnapsToDevicePixels = true };
         _planeMark = CreateMark();
-        var planeMarks = new Canvas { IsHitTestVisible = false };
+        Canvas planeMarks = new Canvas { IsHitTestVisible = false };
         planeMarks.Children.Add(_planeMark);
         _planeHost.Children.Add(_planeImage);
         _planeHost.Children.Add(planeMarks);
@@ -58,7 +58,7 @@ internal sealed class HudColorWell : UserControl
         _planeHost.MouseLeftButtonUp += (_, _) => EndDrag(_planeHost);
         _planeHost.LostMouseCapture += (_, _) => EndDrag(_planeHost);
 
-        var hueBorder = new Border
+        Border hueBorder = new Border
         {
             Height = 16,
             Margin = new Thickness(0, 8, 0, 8),
@@ -82,7 +82,7 @@ internal sealed class HudColorWell : UserControl
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Stretch
         };
-        var hueMarks = new Canvas { IsHitTestVisible = false };
+        Canvas hueMarks = new Canvas { IsHitTestVisible = false };
         hueMarks.Children.Add(_hueMark);
         _hueHost.Children.Add(hueMarks);
         hueBorder.Child = _hueHost;
@@ -100,7 +100,7 @@ internal sealed class HudColorWell : UserControl
         _hueHost.MouseLeftButtonUp += (_, _) => EndDrag(_hueHost);
         _hueHost.LostMouseCapture += (_, _) => EndDrag(_hueHost);
 
-        var row = new DockPanel();
+        DockPanel row = new DockPanel();
         _swatch = new Border
         {
             Width = 36,
@@ -111,7 +111,7 @@ internal sealed class HudColorWell : UserControl
         };
         _swatch.SetResourceReference(Border.BorderBrushProperty, "FrameSoftBrush");
         DockPanel.SetDock(_swatch, Dock.Left);
-        var hexBorder = new Border
+        Border hexBorder = new Border
         {
             Height = 36,
             CornerRadius = new CornerRadius(7),
@@ -157,7 +157,7 @@ internal sealed class HudColorWell : UserControl
     public void SetColor(Color color)
     {
         _color = color;
-        var (hue, saturation, value) = ToHsv(color);
+        (double hue, double saturation, double value) = ToHsv(color);
         if (saturation >= 0.02)
             _hue = hue;
         _saturation = saturation;
@@ -211,7 +211,7 @@ internal sealed class HudColorWell : UserControl
 
     private void Publish()
     {
-        var next = FromHsv(_hue, _saturation, _value);
+        Color next = FromHsv(_hue, _saturation, _value);
         if (next == _color)
         {
             PositionMarkers();
@@ -237,7 +237,7 @@ internal sealed class HudColorWell : UserControl
         if (_silent)
             return;
 
-        if (!HudPalette.TryParse(_hex.Text, out var color))
+        if (!HudPalette.TryParse(_hex.Text, out Color color))
         {
             ShowColor();
             return;
@@ -255,23 +255,23 @@ internal sealed class HudColorWell : UserControl
 
     private void PaintPlane()
     {
-        var width = Math.Max(0, (int)Math.Round(_planeHost.ActualWidth));
-        var height = Math.Max(0, (int)Math.Round(_planeHost.ActualHeight));
+        int width = Math.Max(0, (int)Math.Round(_planeHost.ActualWidth));
+        int height = Math.Max(0, (int)Math.Round(_planeHost.ActualHeight));
         if (width < 2 || height < 2)
             return;
 
-        var hueKey = (int)Math.Round(_hue);
+        int hueKey = (int)Math.Round(_hue);
         if (width == _paintedWidth && height == _paintedHeight && hueKey == _paintedHue)
             return;
 
-        var pixels = new byte[width * height * 4];
-        for (var y = 0; y < height; y++)
+        byte[] pixels = new byte[width * height * 4];
+        for (int y = 0; y < height; y++)
         {
-            var value = 1 - y / (double)(height - 1);
-            for (var x = 0; x < width; x++)
+            double value = 1 - y / (double)(height - 1);
+            for (int x = 0; x < width; x++)
             {
-                var color = FromHsv(_hue, x / (double)(width - 1), value);
-                var index = (y * width + x) * 4;
+                Color color = FromHsv(_hue, x / (double)(width - 1), value);
+                int index = (y * width + x) * 4;
                 pixels[index] = color.B;
                 pixels[index + 1] = color.G;
                 pixels[index + 2] = color.R;
@@ -279,7 +279,7 @@ internal sealed class HudColorWell : UserControl
             }
         }
 
-        var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
+        BitmapSource bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
         bitmap.Freeze();
         _planeImage.Source = bitmap;
         _paintedWidth = width;
@@ -301,7 +301,7 @@ internal sealed class HudColorWell : UserControl
 
     private static FrameworkElement CreateMark()
     {
-        var mark = new Grid
+        Grid mark = new Grid
         {
             Width = 14,
             Height = 14,
@@ -331,18 +331,18 @@ internal sealed class HudColorWell : UserControl
 
     private static BitmapSource CreateHueStrip()
     {
-        var pixels = new byte[360 * 4];
-        for (var x = 0; x < 360; x++)
+        byte[] pixels = new byte[360 * 4];
+        for (int x = 0; x < 360; x++)
         {
-            var color = FromHsv(x, 1, 1);
-            var index = x * 4;
+            Color color = FromHsv(x, 1, 1);
+            int index = x * 4;
             pixels[index] = color.B;
             pixels[index + 1] = color.G;
             pixels[index + 2] = color.R;
             pixels[index + 3] = 255;
         }
 
-        var bitmap = BitmapSource.Create(360, 1, 96, 96, PixelFormats.Bgra32, null, pixels, 360 * 4);
+        BitmapSource bitmap = BitmapSource.Create(360, 1, 96, 96, PixelFormats.Bgra32, null, pixels, 360 * 4);
         bitmap.Freeze();
         return bitmap;
     }
@@ -350,13 +350,13 @@ internal sealed class HudColorWell : UserControl
     private static Color FromHsv(double hue, double saturation, double value)
     {
         hue = ((hue % 360) + 360) % 360;
-        var sector = hue / 60d;
-        var index = (int)Math.Floor(sector) % 6;
-        var fraction = sector - Math.Floor(sector);
-        var p = value * (1 - saturation);
-        var q = value * (1 - fraction * saturation);
-        var t = value * (1 - (1 - fraction) * saturation);
-        var (red, green, blue) = index switch
+        double sector = hue / 60d;
+        int index = (int)Math.Floor(sector) % 6;
+        double fraction = sector - Math.Floor(sector);
+        double p = value * (1 - saturation);
+        double q = value * (1 - fraction * saturation);
+        double t = value * (1 - (1 - fraction) * saturation);
+        (double red, double green, double blue) = index switch
         {
             0 => (value, t, p),
             1 => (q, value, p),
@@ -370,12 +370,12 @@ internal sealed class HudColorWell : UserControl
 
     private static (double Hue, double Saturation, double Value) ToHsv(Color color)
     {
-        var red = color.R / 255d;
-        var green = color.G / 255d;
-        var blue = color.B / 255d;
-        var max = Math.Max(red, Math.Max(green, blue));
-        var min = Math.Min(red, Math.Min(green, blue));
-        var delta = max - min;
+        double red = color.R / 255d;
+        double green = color.G / 255d;
+        double blue = color.B / 255d;
+        double max = Math.Max(red, Math.Max(green, blue));
+        double min = Math.Min(red, Math.Min(green, blue));
+        double delta = max - min;
         double hue = 0;
         if (delta > 0.00001)
         {
@@ -387,7 +387,7 @@ internal sealed class HudColorWell : UserControl
                 hue = 60 * ((red - green) / delta + 4);
         }
 
-        var saturation = max <= 0 ? 0 : delta / max;
+        double saturation = max <= 0 ? 0 : delta / max;
         return (hue, saturation, max);
     }
 

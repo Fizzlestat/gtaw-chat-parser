@@ -27,31 +27,31 @@ internal static class AppUpdate
         installed != null && installed > assembly ? installed : assembly;
 
     internal static bool IsNewer(string? tag, Version current) =>
-        TryParseTag(tag, out var remote) && remote > current;
+        TryParseTag(tag, out Version remote) && remote > current;
 
     internal static async Task<UpdateOffer?> FindAsync(CancellationToken cancellationToken)
     {
-        if (!TrySplitRepository(Repository, out var owner, out var name))
+        if (!TrySplitRepository(Repository, out string owner, out string name))
             throw new InvalidOperationException("No GitHub repository is set for updates.");
 
-        var url = $"https://api.github.com/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(name)}/releases/latest";
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        string url = $"https://api.github.com/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(name)}/releases/latest";
+        using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Accept.ParseAdd("application/vnd.github+json");
         request.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", "2022-11-28");
-        using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using HttpResponseMessage response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
             throw new InvalidOperationException("No published release was found.");
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException("Couldn't check for updates.");
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-        var root = document.RootElement;
-        var tag = root.TryGetProperty("tag_name", out var tagValue) ? tagValue.GetString() : null;
-        if (!TryParseTag(tag, out var remote) || remote <= Current)
+        await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using JsonDocument document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        JsonElement root = document.RootElement;
+        string? tag = root.TryGetProperty("tag_name", out JsonElement tagValue) ? tagValue.GetString() : null;
+        if (!TryParseTag(tag, out Version remote) || remote <= Current)
             return null;
 
-        var download = FindAssetUrl(root);
+        string? download = FindAssetUrl(root);
         if (download == null)
             throw new InvalidOperationException("The latest release does not include GTAWChatParser.exe.");
 
@@ -61,18 +61,18 @@ internal static class AppUpdate
     internal static async Task DownloadAsync(UpdateOffer offer, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(AppPaths.Directory);
-        var partial = Path.Combine(AppPaths.Directory, "update.exe.partial");
-        var destination = Path.Combine(AppPaths.Directory, "update.exe");
+        string partial = Path.Combine(AppPaths.Directory, "update.exe.partial");
+        string destination = Path.Combine(AppPaths.Directory, "update.exe");
         if (File.Exists(partial))
             File.Delete(partial);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, offer.DownloadUrl);
-        using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, offer.DownloadUrl);
+        using HttpResponseMessage response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException("The update could not be downloaded.");
 
-        await using (var input = await response.Content.ReadAsStreamAsync(cancellationToken))
-        await using (var output = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None))
+        await using (Stream input = await response.Content.ReadAsStreamAsync(cancellationToken))
+        await using (FileStream output = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None))
             await input.CopyToAsync(output, cancellationToken);
 
         if (!IsExecutable(partial))
@@ -86,16 +86,16 @@ internal static class AppUpdate
 
     internal static void BeginInstall(string releaseVersion)
     {
-        var exe = Environment.ProcessPath;
+        string? exe = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(exe))
             throw new InvalidOperationException("The parser path could not be found.");
 
         Directory.CreateDirectory(AppPaths.Directory);
-        var pending = Path.Combine(AppPaths.Directory, "installed.version.pending");
+        string pending = Path.Combine(AppPaths.Directory, "installed.version.pending");
         File.WriteAllText(pending, NormalizeVersionText(releaseVersion), new UTF8Encoding(false));
-        var scriptPath = Path.Combine(AppPaths.Directory, "update.cmd");
-        var target = exe.Replace("%", "%%");
-        var script = string.Join("\r\n",
+        string scriptPath = Path.Combine(AppPaths.Directory, "update.cmd");
+        string target = exe.Replace("%", "%%");
+        string script = string.Join("\r\n",
             "@echo off",
             "chcp 65001 >nul",
             "set \"SOURCE=%LOCALAPPDATA%\\GTAWChatParser\\update.exe\"",
@@ -134,7 +134,7 @@ internal static class AppUpdate
 
     private static HttpClient CreateClient()
     {
-        var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = true })
+        HttpClient client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = true })
         {
             Timeout = TimeSpan.FromMinutes(2)
         };
@@ -146,7 +146,7 @@ internal static class AppUpdate
     {
         owner = "";
         name = "";
-        var slash = repository.IndexOf('/');
+        int slash = repository.IndexOf('/');
         if (slash <= 0 || slash != repository.LastIndexOf('/'))
             return false;
 
@@ -161,18 +161,18 @@ internal static class AppUpdate
         if (string.IsNullOrWhiteSpace(tag))
             return false;
 
-        var text = tag.Trim();
+        string text = tag.Trim();
         if (text.StartsWith('v') || text.StartsWith('V'))
             text = text[1..];
 
-        var dash = text.IndexOfAny(['-', '+']);
+        int dash = text.IndexOfAny(['-', '+']);
         if (dash >= 0)
             text = text[..dash];
 
         if (!text.Contains('.'))
             text += ".0";
 
-        if (!Version.TryParse(text, out var parsed) || parsed == null)
+        if (!Version.TryParse(text, out Version? parsed) || parsed == null)
             return false;
 
         version = new Version(
@@ -187,11 +187,11 @@ internal static class AppUpdate
     {
         try
         {
-            var path = Path.Combine(AppPaths.Directory, "installed.version");
+            string path = Path.Combine(AppPaths.Directory, "installed.version");
             if (!File.Exists(path))
                 return null;
 
-            return TryParseTag(File.ReadAllText(path).Trim(), out var version) ? version : null;
+            return TryParseTag(File.ReadAllText(path).Trim(), out Version version) ? version : null;
         }
         catch (Exception)
         {
@@ -201,23 +201,23 @@ internal static class AppUpdate
 
     private static string NormalizeVersionText(string releaseVersion)
     {
-        var chars = releaseVersion.Where(character => char.IsDigit(character) || character == '.').ToArray();
-        var text = new string(chars).Trim('.');
-        return TryParseTag(text, out var version) ? FormatVersion(version) : text;
+        char[] chars = releaseVersion.Where(character => char.IsDigit(character) || character == '.').ToArray();
+        string text = new string(chars).Trim('.');
+        return TryParseTag(text, out Version version) ? FormatVersion(version) : text;
     }
 
     private static string? FindAssetUrl(JsonElement root)
     {
-        if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
+        if (!root.TryGetProperty("assets", out JsonElement assets) || assets.ValueKind != JsonValueKind.Array)
             return null;
 
-        foreach (var asset in assets.EnumerateArray())
+        foreach (JsonElement asset in assets.EnumerateArray())
         {
-            var name = asset.TryGetProperty("name", out var nameValue) ? nameValue.GetString() : null;
+            string? name = asset.TryGetProperty("name", out JsonElement nameValue) ? nameValue.GetString() : null;
             if (!string.Equals(name, "GTAWChatParser.exe", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var url = asset.TryGetProperty("browser_download_url", out var urlValue) ? urlValue.GetString() : null;
+            string? url = asset.TryGetProperty("browser_download_url", out JsonElement urlValue) ? urlValue.GetString() : null;
             if (!string.IsNullOrWhiteSpace(url))
                 return url;
         }
@@ -236,12 +236,12 @@ internal static class AppUpdate
 
     private static bool IsExecutable(string path)
     {
-        var info = new FileInfo(path);
+        FileInfo info = new FileInfo(path);
         if (info.Length < 65536)
             return false;
 
-        using var stream = File.OpenRead(path);
-        var header = new byte[2];
+        using FileStream stream = File.OpenRead(path);
+        byte[] header = new byte[2];
         return stream.Read(header, 0, 2) == 2 && header[0] == (byte)'M' && header[1] == (byte)'Z';
     }
 }

@@ -46,18 +46,18 @@ internal sealed class NuiChatClient : IDisposable
     public async Task<IReadOnlyList<CapturedLine>> ReadLinesAsync(CancellationToken cancellationToken)
     {
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-        using var response = await RequestAsync("Runtime.evaluate", new JsonObject
+        using JsonDocument response = await RequestAsync("Runtime.evaluate", new JsonObject
         {
             ["expression"] = ChatPageScript.ExtractLines,
             ["contextId"] = _contextId,
             ["returnByValue"] = true
         }, cancellationToken).ConfigureAwait(false);
 
-        var payload = ReadEvaluateText(response.RootElement);
+        string? payload = ReadEvaluateText(response.RootElement);
         if (string.IsNullOrWhiteSpace(payload))
             return [];
 
-        var lines = JsonSerializer.Deserialize<CapturedLine[]>(payload, LineJson) ?? [];
+        CapturedLine[] lines = JsonSerializer.Deserialize<CapturedLine[]>(payload, LineJson) ?? [];
         return lines
             .Where(line => !string.IsNullOrWhiteSpace(line.Plain))
             .Select(line => new CapturedLine(line.Plain.Trim(), string.IsNullOrWhiteSpace(line.Colored) ? line.Plain.Trim() : line.Colored.Trim()))
@@ -74,21 +74,21 @@ internal sealed class NuiChatClient : IDisposable
         if (evaluateResult.ValueKind != JsonValueKind.Object)
             return null;
 
-        if (evaluateResult.TryGetProperty("exceptionDetails", out var details))
+        if (evaluateResult.TryGetProperty("exceptionDetails", out JsonElement details))
         {
-            var reason = details.ValueKind == JsonValueKind.Object && details.TryGetProperty("text", out var text)
+            string? reason = details.ValueKind == JsonValueKind.Object && details.TryGetProperty("text", out JsonElement text)
                 ? text.GetString()
                 : null;
             throw new IOException(string.IsNullOrWhiteSpace(reason) ? "The GTAW chat page rejected the read." : reason);
         }
 
-        if (!evaluateResult.TryGetProperty("result", out var remote) || remote.ValueKind != JsonValueKind.Object)
+        if (!evaluateResult.TryGetProperty("result", out JsonElement remote) || remote.ValueKind != JsonValueKind.Object)
             return null;
 
-        if (remote.TryGetProperty("subtype", out var subtype) && subtype.ValueKind == JsonValueKind.String && subtype.GetString() == "error")
+        if (remote.TryGetProperty("subtype", out JsonElement subtype) && subtype.ValueKind == JsonValueKind.String && subtype.GetString() == "error")
             throw new IOException("The GTAW chat page rejected the read.");
 
-        if (!remote.TryGetProperty("value", out var value) || value.ValueKind != JsonValueKind.String)
+        if (!remote.TryGetProperty("value", out JsonElement value) || value.ValueKind != JsonValueKind.String)
             return null;
 
         return value.GetString();
@@ -105,36 +105,36 @@ internal sealed class NuiChatClient : IDisposable
 
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
     {
-        var port = _port();
+        int port = _port();
         if (_socket is { State: WebSocketState.Open } && _contextId != 0 && _portInUse == port)
             return;
 
         Reset();
         _portInUse = port;
 
-        var socketUrl = await FindRootSocketUrlAsync(port, cancellationToken).ConfigureAwait(false);
-        var socket = new ClientWebSocket();
+        string socketUrl = await FindRootSocketUrlAsync(port, cancellationToken).ConfigureAwait(false);
+        ClientWebSocket socket = new ClientWebSocket();
         socket.Options.Proxy = null;
         socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(15);
 
-        using var connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using CancellationTokenSource connectTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         connectTimeout.CancelAfter(TimeSpan.FromSeconds(3));
         await socket.ConnectAsync(new Uri(socketUrl), connectTimeout.Token).ConfigureAwait(false);
         _socket = socket;
 
-        using var tree = await RequestAsync("Page.getFrameTree", new JsonObject(), cancellationToken).ConfigureAwait(false);
-        var frameId = FindClientFrameId(tree.RootElement);
+        using JsonDocument tree = await RequestAsync("Page.getFrameTree", new JsonObject(), cancellationToken).ConfigureAwait(false);
+        string? frameId = FindClientFrameId(tree.RootElement);
         if (frameId == null)
             throw new IOException("GTAW chat is still loading.");
 
-        using var world = await RequestAsync("Page.createIsolatedWorld", new JsonObject
+        using JsonDocument world = await RequestAsync("Page.createIsolatedWorld", new JsonObject
         {
             ["frameId"] = frameId,
             ["worldName"] = "gtaw-chat-parser",
             ["grantUniveralAccess"] = true
         }, cancellationToken).ConfigureAwait(false);
 
-        if (!world.RootElement.TryGetProperty("executionContextId", out var contextId))
+        if (!world.RootElement.TryGetProperty("executionContextId", out JsonElement contextId))
             throw new IOException("GTAW chat context is unavailable.");
 
         _contextId = contextId.GetInt32();
@@ -142,22 +142,22 @@ internal sealed class NuiChatClient : IDisposable
 
     private async Task<string> FindRootSocketUrlAsync(int port, CancellationToken cancellationToken)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(3));
-        var json = await Http.GetStringAsync($"http://127.0.0.1:{port}/json", timeout.Token).ConfigureAwait(false);
-        using var document = JsonDocument.Parse(json);
+        string json = await Http.GetStringAsync($"http://127.0.0.1:{port}/json", timeout.Token).ConfigureAwait(false);
+        using JsonDocument document = JsonDocument.Parse(json);
         if (document.RootElement.ValueKind != JsonValueKind.Array)
             throw new IOException("FiveM did not list any inspectable pages.");
 
-        foreach (var target in document.RootElement.EnumerateArray())
+        foreach (JsonElement target in document.RootElement.EnumerateArray())
         {
-            if (!target.TryGetProperty("url", out var urlProperty))
+            if (!target.TryGetProperty("url", out JsonElement urlProperty))
                 continue;
 
             if (!string.Equals(urlProperty.GetString(), RootUiUrl, StringComparison.Ordinal))
                 continue;
 
-            if (target.TryGetProperty("webSocketDebuggerUrl", out var socketProperty) &&
+            if (target.TryGetProperty("webSocketDebuggerUrl", out JsonElement socketProperty) &&
                 socketProperty.GetString() is { Length: > 0 } socketUrl)
             {
                 return socketUrl;
@@ -172,33 +172,33 @@ internal sealed class NuiChatClient : IDisposable
         if (_socket is not { State: WebSocketState.Open })
             throw new IOException("The chat inspector is not connected.");
 
-        var id = ++_nextId;
-        var message = new JsonObject
+        int id = ++_nextId;
+        JsonObject message = new JsonObject
         {
             ["id"] = id,
             ["method"] = method,
             ["params"] = parameters
         };
-        var bytes = Encoding.UTF8.GetBytes(message.ToJsonString());
+        byte[] bytes = Encoding.UTF8.GetBytes(message.ToJsonString());
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(3));
         await _socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, timeout.Token).ConfigureAwait(false);
 
         while (true)
         {
-            var response = await ReceiveTextAsync(timeout.Token).ConfigureAwait(false);
-            using var document = JsonDocument.Parse(response);
-            if (!document.RootElement.TryGetProperty("id", out var responseId) || responseId.GetInt32() != id)
+            string response = await ReceiveTextAsync(timeout.Token).ConfigureAwait(false);
+            using JsonDocument document = JsonDocument.Parse(response);
+            if (!document.RootElement.TryGetProperty("id", out JsonElement responseId) || responseId.GetInt32() != id)
                 continue;
 
-            if (document.RootElement.TryGetProperty("error", out var error))
+            if (document.RootElement.TryGetProperty("error", out JsonElement error))
             {
-                var text = error.TryGetProperty("message", out var errorMessage) ? errorMessage.GetString() : "Inspector request failed.";
+                string? text = error.TryGetProperty("message", out JsonElement errorMessage) ? errorMessage.GetString() : "Inspector request failed.";
                 throw new IOException(text);
             }
 
-            if (!document.RootElement.TryGetProperty("result", out var result))
+            if (!document.RootElement.TryGetProperty("result", out JsonElement result))
                 return JsonDocument.Parse("{}");
 
             return JsonDocument.Parse(result.GetRawText());
@@ -210,8 +210,8 @@ internal sealed class NuiChatClient : IDisposable
         if (_socket == null)
             throw new IOException("The chat inspector is not connected.");
 
-        using var stream = new MemoryStream();
-        var buffer = new byte[16 * 1024];
+        using MemoryStream stream = new MemoryStream();
+        byte[] buffer = new byte[16 * 1024];
         WebSocketReceiveResult result;
         do
         {
@@ -231,23 +231,23 @@ internal sealed class NuiChatClient : IDisposable
         if (element.ValueKind != JsonValueKind.Object)
             return null;
 
-        if (element.TryGetProperty("frameTree", out var tree))
+        if (element.TryGetProperty("frameTree", out JsonElement tree))
             return FindClientFrameId(tree);
 
-        if (element.TryGetProperty("frame", out var frame) &&
-            frame.TryGetProperty("url", out var url) &&
+        if (element.TryGetProperty("frame", out JsonElement frame) &&
+            frame.TryGetProperty("url", out JsonElement url) &&
             string.Equals(url.GetString(), ClientFrameUrl, StringComparison.Ordinal) &&
-            frame.TryGetProperty("id", out var id))
+            frame.TryGetProperty("id", out JsonElement id))
         {
             return id.GetString();
         }
 
-        if (!element.TryGetProperty("childFrames", out var children) || children.ValueKind != JsonValueKind.Array)
+        if (!element.TryGetProperty("childFrames", out JsonElement children) || children.ValueKind != JsonValueKind.Array)
             return null;
 
-        foreach (var child in children.EnumerateArray())
+        foreach (JsonElement child in children.EnumerateArray())
         {
-            var found = FindClientFrameId(child);
+            string? found = FindClientFrameId(child);
             if (found != null)
                 return found;
         }
@@ -257,7 +257,7 @@ internal sealed class NuiChatClient : IDisposable
 
     private void CloseSocket()
     {
-        var socket = _socket;
+        ClientWebSocket? socket = _socket;
         _socket = null;
         if (socket == null)
             return;

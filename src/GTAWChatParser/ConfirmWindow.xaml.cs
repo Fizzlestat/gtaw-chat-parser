@@ -11,7 +11,7 @@ public partial class ConfirmWindow : Window
 
     public static bool Ask(Window? owner, string? title = null, string? message = null, string? confirm = null)
     {
-        var dialog = new ConfirmWindow();
+        ConfirmWindow dialog = new ConfirmWindow();
         if (!string.IsNullOrWhiteSpace(title))
         {
             dialog.Title = title;
@@ -40,10 +40,10 @@ public partial class ConfirmWindow : Window
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        CubicEase ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
         Slide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(12, 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
-        var fallback = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        DispatcherTimer fallback = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         fallback.Tick += (_, _) =>
         {
             fallback.Stop();

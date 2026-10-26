@@ -9,21 +9,21 @@ public class ChatLogTests
     [Fact]
     public void Header_and_filename_match_the_gtaw_archive_layout()
     {
-        var startedAt = new DateTime(2026, 10, 22, 14, 5, 9);
-        var content = ChatLog.Render(startedAt, ["[14:05:09] John Doe says: Hello"]);
+        DateTime startedAt = new DateTime(2026, 10, 22, 14, 5, 9);
+        string content = ChatLog.Render(startedAt, ["[14:05:09] John Doe says: Hello"]);
 
         Assert.Equal(
             "[DATE: 22/OCT/2026 | TIME: 14:05:09]\r\n[14:05:09] John Doe says: Hello\r\n",
             content);
 
-        var root = Path.Combine(Path.GetTempPath(), "gtaw-parser-" + Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(Path.GetTempPath(), "gtaw-parser-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var path = LogArchive.Save(root, startedAt, content);
+            string path = LogArchive.Save(root, startedAt, content);
             Assert.Equal(
                 Path.Combine(root, "2026", "OCT", "22.OCT.2026-14.05.09.txt"),
                 path);
-            var bytes = File.ReadAllBytes(path);
+            byte[] bytes = File.ReadAllBytes(path);
             Assert.Equal((byte)'[', bytes[0]);
             Assert.Equal(content, File.ReadAllText(path));
         }
@@ -37,8 +37,8 @@ public class ChatLogTests
     [Fact]
     public void Hud_timestamp_is_kept_and_starts_the_session()
     {
-        var line = ChatLog.FormatLine("[9:01:02] Jane whispers: hi", CapturedAt);
-        var startedAt = ChatLog.ResolveTimestamp("[9:01:02] Jane whispers: hi", CapturedAt);
+        string line = ChatLog.FormatLine("[9:01:02] Jane whispers: hi", CapturedAt);
+        DateTime startedAt = ChatLog.ResolveTimestamp("[9:01:02] Jane whispers: hi", CapturedAt);
 
         Assert.Equal("[9:01:02] Jane whispers: hi", line);
         Assert.Equal(new DateTime(2026, 10, 22, 9, 1, 2), startedAt);
@@ -48,7 +48,7 @@ public class ChatLogTests
     [Fact]
     public void Color_code_does_not_add_a_second_timestamp()
     {
-        var line = ChatLog.FormatLine("^#71CB71[18:12:36] Health restored!", CapturedAt);
+        string line = ChatLog.FormatLine("^#71CB71[18:12:36] Health restored!", CapturedAt);
         Assert.Equal("^#71CB71[18:12:36] Health restored!", line);
         Assert.Equal(new DateTime(2026, 10, 22, 18, 12, 36), ChatLog.ResolveTimestamp(line, CapturedAt));
     }
@@ -56,15 +56,15 @@ public class ChatLogTests
     [Fact]
     public void Missing_timestamp_uses_the_capture_clock()
     {
-        var line = ChatLog.FormatLine("  John   Doe says: Hello \r\n there ", CapturedAt);
+        string line = ChatLog.FormatLine("  John   Doe says: Hello \r\n there ", CapturedAt);
         Assert.Equal("[14:05:09] John Doe says: Hello there", line);
     }
 
     [Fact]
     public void Overlap_appends_only_lines_that_scrolled_in()
     {
-        var previous = new[] { "a", "b", "c", "d" };
-        var current = new[] { "c", "d", "e" };
+        string[] previous = new[] { "a", "b", "c", "d" };
+        string[] current = new[] { "c", "d", "e" };
 
         Assert.Equal(2, ChatLog.FindOverlap(previous, current));
         Assert.Equal("e", Assert.Single(current.Skip(2)));
@@ -76,9 +76,9 @@ public class ChatLogTests
     [Fact]
     public void Keywords_are_case_insensitive_and_ignore_the_timestamp()
     {
-        var line = "[14:05:09] JOHN Doe says: Meet me at the bank";
+        string line = "[14:05:09] JOHN Doe says: Meet me at the bank";
 
-        var matched = ChatLog.FindKeywords(line, ["John", "BANK", "14:05"]);
+        IReadOnlyList<string> matched = ChatLog.FindKeywords(line, ["John", "BANK", "14:05"]);
         Assert.Equal(2, matched.Count);
         Assert.Equal("John", matched[0]);
         Assert.Equal("BANK", matched[1]);
@@ -88,28 +88,28 @@ public class ChatLogTests
     [Fact]
     public void Keywords_can_require_matching_letter_case()
     {
-        var line = "[14:05:09] JOHN Doe says: Meet me at the bank";
+        string line = "[14:05:09] JOHN Doe says: Meet me at the bank";
 
-        var matched = ChatLog.FindKeywords(line, ["John", "bank"], caseSensitive: true);
+        IReadOnlyList<string> matched = ChatLog.FindKeywords(line, ["John", "bank"], caseSensitive: true);
         Assert.Equal("bank", Assert.Single(matched));
     }
 
     [Fact]
     public void Shorter_rewrite_keeps_the_existing_log()
     {
-        var startedAt = new DateTime(2026, 1, 3, 8, 0, 0);
-        var root = Path.Combine(Path.GetTempPath(), "gtaw-parser-" + Guid.NewGuid().ToString("N"));
+        DateTime startedAt = new DateTime(2026, 1, 3, 8, 0, 0);
+        string root = Path.Combine(Path.GetTempPath(), "gtaw-parser-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var longer = ChatLog.Render(startedAt, ["[08:00:00] first", "[08:00:01] second"]);
-            var shorter = ChatLog.Render(startedAt, ["[08:00:00] first"]);
-            var path = LogArchive.Save(root, startedAt, longer);
+            string longer = ChatLog.Render(startedAt, ["[08:00:00] first", "[08:00:01] second"]);
+            string shorter = ChatLog.Render(startedAt, ["[08:00:00] first"]);
+            string path = LogArchive.Save(root, startedAt, longer);
             LogArchive.Save(root, startedAt, shorter);
 
             Assert.Equal(longer, File.ReadAllText(path));
             Assert.Equal(Path.Combine(root, "2026", "JAN", "03.JAN.2026-08.00.00.txt"), path);
 
-            var grown = ChatLog.Render(startedAt, ["[08:00:00] first", "[08:00:01] second", "[08:00:02] third"]);
+            string grown = ChatLog.Render(startedAt, ["[08:00:00] first", "[08:00:01] second", "[08:00:02] third"]);
             LogArchive.Save(root, startedAt, grown);
             Assert.Equal(grown, File.ReadAllText(path));
         }
@@ -123,9 +123,9 @@ public class ChatLogTests
     [Fact]
     public void Saved_text_round_trips_through_the_session_header()
     {
-        var session = ChatSession.Start("[9:01:02] Hello", CapturedAt);
+        ChatSession session = ChatSession.Start("[9:01:02] Hello", CapturedAt);
         session.Add([ChatLog.FormatLine("[9:01:02] Hello", CapturedAt)], ["[9:01:02] ^#C8A2FFHello"]);
-        var loaded = ChatSession.TryLoad(session.ToFileText());
+        ChatSession? loaded = ChatSession.TryLoad(session.ToFileText());
 
         Assert.NotNull(loaded);
         Assert.Equal(new DateTime(2026, 10, 22, 9, 1, 2), loaded.StartedAt);
@@ -139,7 +139,7 @@ public class ChatLogTests
     [Fact]
     public void Color_refresh_does_not_replace_a_log_only_emote()
     {
-        var session = ChatSession.Start("[18:00:00] Welcome", CapturedAt);
+        ChatSession session = ChatSession.Start("[18:00:00] Welcome", CapturedAt);
         session.Add(
             ["[18:00:00] Welcome", "[18:00:01] > Alex waves", "[18:00:02] Alex says: hi"],
             ["[18:00:00] Welcome", "[18:00:02] ^#FFFFFFAlex says: hi", "[18:00:02] Alex says: hi"]);
@@ -160,14 +160,14 @@ public class ChatLogTests
     [Fact]
     public void Transcript_keeps_color_codes_unless_the_line_is_highlighted()
     {
-        var plain = "[14:05:09] John Doe says: Hello";
-        var colored = "[14:05:09] ^#FFBB33John Doe says: Hello";
+        string plain = "[14:05:09] John Doe says: Hello";
+        string colored = "[14:05:09] ^#FFBB33John Doe says: Hello";
 
         Assert.Equal(colored, ChatLog.ForTranscript(plain, colored, ["bank"], false));
         Assert.Equal(plain, ChatLog.ForTranscript(plain, colored, ["John"], false));
         Assert.Equal("John Doe says: Hello", ChatLog.StripColorCodes("^#FFBB33John Doe says: Hello"));
 
-        var spans = ChatLog.SplitColorCodes("[14:05:09] ^#FFBB33John ^#FFFFFFDoe");
+        IReadOnlyList<ColorSpan> spans = ChatLog.SplitColorCodes("[14:05:09] ^#FFBB33John ^#FFFFFFDoe");
         Assert.Equal(3, spans.Count);
         Assert.Equal("[14:05:09] ", spans[0].Text);
         Assert.Null(spans[0].Hex);
@@ -194,7 +194,7 @@ public class ChatLogTests
         Assert.Equal("[18:19:38] * (A) Admin message", ChatLog.WithFallbackColor("[18:19:38] * (A) Admin message"));
         Assert.Equal("[18:19:40] Weather forecast:", ChatLog.WithFallbackColor("[18:19:40] Weather forecast:"));
 
-        var hud = "[18:19:32] ^#00FF00* Selene Watson me line";
+        string hud = "[18:19:32] ^#00FF00* Selene Watson me line";
         Assert.Equal(hud, ChatLog.ForTranscript("[18:19:32] * Selene Watson me line", hud, [], false));
         Assert.Equal("[18:19:32] * Selene Watson me line", ChatLog.ForTranscript("[18:19:32] * Selene Watson me line", null, ["Selene"], false));
     }
@@ -211,8 +211,23 @@ public class ChatLogTests
             }
             """;
 
-        using var document = System.Text.Json.JsonDocument.Parse(json);
-        var text = NuiChatClient.ReadEvaluateText(document.RootElement);
+        using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(json);
+        string? text = NuiChatClient.ReadEvaluateText(document.RootElement);
         Assert.Equal("[\"[05:54:17] Hello there\"]", text);
+    }
+
+    [Fact]
+    public void Web_links_are_separated_from_surrounding_text()
+    {
+        List<TextPiece> pieces = ChatLog.SplitLinks("See https://example.com/path. and www.example.com/a).");
+
+        Assert.Equal("See ", pieces[0].Text);
+        Assert.Null(pieces[0].Link);
+        Assert.Equal("https://example.com/path", pieces[1].Text);
+        Assert.Equal("https://example.com/path", pieces[1].Link?.AbsoluteUri);
+        Assert.Equal(". and ", pieces[2].Text);
+        Assert.Equal("www.example.com/a", pieces[3].Text);
+        Assert.Equal("https://www.example.com/a", pieces[3].Link?.AbsoluteUri);
+        Assert.Equal(").", pieces[4].Text);
     }
 }

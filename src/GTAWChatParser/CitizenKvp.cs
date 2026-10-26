@@ -18,17 +18,17 @@ internal sealed class GameChatLog
         lines = [];
         string? bestText = null;
         DateTime bestStarted = DateTime.MinValue;
-        var bestHasTime = false;
-        foreach (var directory in Locations())
+        bool bestHasTime = false;
+        foreach (string directory in Locations())
         {
-            if (!TryReadDatabase(directory, out var text) || string.IsNullOrEmpty(text))
+            if (!TryReadDatabase(directory, out string? text) || string.IsNullOrEmpty(text))
                 continue;
 
-            if (!LogLines.TrySplitTranscript(text, out var fileHeader, out _))
+            if (!LogLines.TrySplitTranscript(text, out string fileHeader, out _))
                 continue;
 
-            var hasTime = ChatLog.TryParseHeader(fileHeader, out var started);
-            var newer = bestText == null
+            bool hasTime = ChatLog.TryParseHeader(fileHeader, out DateTime started);
+            bool newer = bestText == null
                 || (hasTime && (!bestHasTime || started > bestStarted))
                 || (hasTime == bestHasTime && text.Length > (bestText?.Length ?? 0));
             if (!newer)
@@ -40,7 +40,7 @@ internal sealed class GameChatLog
                 bestStarted = started;
         }
 
-        if (bestText == null || !LogLines.TrySplitTranscript(bestText, out header, out var parsed))
+        if (bestText == null || !LogLines.TrySplitTranscript(bestText, out header, out List<string> parsed))
             return false;
 
         lines = parsed;
@@ -49,7 +49,7 @@ internal sealed class GameChatLog
 
     internal static IEnumerable<string> Locations()
     {
-        var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         yield return Path.Combine(roaming, "CitizenFX", "kvs");
         yield return Path.Combine(roaming, "CitizenFX", "kvs_cl2");
     }
@@ -77,23 +77,23 @@ internal sealed class GameChatLog
             return false;
         }
 
-        var best = default(Found);
-        var live = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in files)
+        Found best = default(Found);
+        HashSet<string> live = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (FileInfo file in files)
         {
             live.Add(file.FullName);
             Found found;
             try
             {
-                var token = file.Length + ":" + file.LastWriteTimeUtc.Ticks;
-                _files.TryGetValue(file.FullName, out var cached);
+                string token = file.Length + ":" + file.LastWriteTimeUtc.Ticks;
+                _files.TryGetValue(file.FullName, out CachedFile? cached);
                 if (cached != null && cached.Token == token)
                 {
                     found = cached.Value;
                 }
                 else
                 {
-                    var resume = cached != null
+                    bool resume = cached != null
                         && !IsTable(file.FullName)
                         && cached.WalOffset > 0
                         && file.Length >= cached.WalOffset;
@@ -116,8 +116,8 @@ internal sealed class GameChatLog
                 best = found;
         }
 
-        var folder = directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        foreach (var cached in _files.Keys.Where(path => path.StartsWith(folder, StringComparison.OrdinalIgnoreCase) && !live.Contains(path)).ToArray())
+        string folder = directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        foreach (string cached in _files.Keys.Where(path => path.StartsWith(folder, StringComparison.OrdinalIgnoreCase) && !live.Contains(path)).ToArray())
             _files.Remove(cached);
 
         text = best.Text;
@@ -126,12 +126,12 @@ internal sealed class GameChatLog
 
     private Found ReadFile(string path, string token, CachedFile? resume)
     {
-        var info = new FileInfo(path);
+        FileInfo info = new FileInfo(path);
         if (!info.Exists || info.Length <= 0 || info.Length > MaxFileBytes)
             return default;
 
         byte[] bytes;
-        using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
         {
             if (stream.Length <= 0 || stream.Length > MaxFileBytes)
                 return default;
@@ -142,15 +142,15 @@ internal sealed class GameChatLog
 
         if (IsTable(path))
         {
-            var table = LevelDb.ReadTable(bytes);
+            Found table = LevelDb.ReadTable(bytes);
             _files[path] = new CachedFile { Token = token, Value = table };
             return table;
         }
 
-        var cursor = resume ?? new CachedFile();
-        var offset = resume == null ? 0 : cursor.WalOffset;
-        var assembling = resume != null && cursor.Assembling;
-        var best = resume == null ? default : cursor.Value;
+        CachedFile cursor = resume ?? new CachedFile();
+        int offset = resume == null ? 0 : cursor.WalOffset;
+        bool assembling = resume != null && cursor.Assembling;
+        Found best = resume == null ? default : cursor.Value;
         best = LevelDb.ReadWal(bytes, ref offset, cursor.Fragment, ref assembling, best);
         cursor.Token = token;
         cursor.Value = best;
@@ -162,7 +162,7 @@ internal sealed class GameChatLog
 
     private static bool IsDataFile(string name)
     {
-        var extension = Path.GetExtension(name);
+        string extension = Path.GetExtension(name);
         if (!extension.Equals(".log", StringComparison.OrdinalIgnoreCase) &&
             !extension.Equals(".ldb", StringComparison.OrdinalIgnoreCase) &&
             !extension.Equals(".sst", StringComparison.OrdinalIgnoreCase))
@@ -170,13 +170,13 @@ internal sealed class GameChatLog
             return false;
         }
 
-        var stem = Path.GetFileNameWithoutExtension(name);
+        string stem = Path.GetFileNameWithoutExtension(name);
         return stem.Length > 0 && stem.All(char.IsDigit);
     }
 
     private static bool IsTable(string path)
     {
-        var extension = Path.GetExtension(path);
+        string extension = Path.GetExtension(path);
         return extension.Equals(".ldb", StringComparison.OrdinalIgnoreCase) ||
                extension.Equals(".sst", StringComparison.OrdinalIgnoreCase);
     }
@@ -205,8 +205,8 @@ internal static class LevelDb
 
     public static GameChatLog.Found ReadWal(byte[] file)
     {
-        var offset = 0;
-        var assembling = false;
+        int offset = 0;
+        bool assembling = false;
         return ReadWal(file, ref offset, [], ref assembling, default);
     }
 
@@ -222,16 +222,16 @@ internal static class LevelDb
 
         while (offset + 7 <= file.Length)
         {
-            var blockEnd = Math.Min(file.Length, offset - (offset % BlockSize) + BlockSize);
-            var remaining = blockEnd - offset;
+            int blockEnd = Math.Min(file.Length, offset - (offset % BlockSize) + BlockSize);
+            int remaining = blockEnd - offset;
             if (remaining < 7)
             {
                 offset = blockEnd;
                 continue;
             }
 
-            var length = file[offset + 4] | (file[offset + 5] << 8);
-            var type = file[offset + 6];
+            int length = file[offset + 4] | (file[offset + 5] << 8);
+            byte type = file[offset + 6];
             if (type == 0 || length == 0)
             {
                 assembling = false;
@@ -253,7 +253,7 @@ internal static class LevelDb
                 break;
             }
 
-            var data = file.AsSpan(offset + 7, length);
+            Span<byte> data = file.AsSpan(offset + 7, length);
             if (!CrcMatches(file.AsSpan(offset, 4), file[offset + 6], data))
             {
                 assembling = false;
@@ -300,33 +300,33 @@ internal static class LevelDb
 
     public static GameChatLog.Found ReadTable(byte[] file)
     {
-        var best = default(GameChatLog.Found);
+        GameChatLog.Found best = default(GameChatLog.Found);
         if (file.Length < 48)
             return best;
 
-        var magic = BitConverter.ToUInt64(file, file.Length - 8);
+        ulong magic = BitConverter.ToUInt64(file, file.Length - 8);
         if (magic != TableMagic)
             return best;
 
-        var footer = file.AsSpan(file.Length - 48, 40);
-        var pos = 0;
+        Span<byte> footer = file.AsSpan(file.Length - 48, 40);
+        int pos = 0;
         if (!TryReadVarint(footer, ref pos, out _) || !TryReadVarint(footer, ref pos, out _))
             return best;
 
-        if (!TryReadVarint(footer, ref pos, out var indexOffset) || !TryReadVarint(footer, ref pos, out var indexSize))
+        if (!TryReadVarint(footer, ref pos, out ulong indexOffset) || !TryReadVarint(footer, ref pos, out ulong indexSize))
             return best;
 
-        if (!TryReadBlock(file, indexOffset, indexSize, out var index))
+        if (!TryReadBlock(file, indexOffset, indexSize, out byte[] index))
             return best;
 
-        foreach (var entry in Walk(index))
+        foreach ((byte[] Key, byte[] Value) entry in Walk(index))
         {
-            var handle = entry.Value;
-            var handlePos = 0;
-            if (!TryReadVarint(handle, ref handlePos, out var offset) || !TryReadVarint(handle, ref handlePos, out var size))
+            byte[] handle = entry.Value;
+            int handlePos = 0;
+            if (!TryReadVarint(handle, ref handlePos, out ulong offset) || !TryReadVarint(handle, ref handlePos, out ulong size))
                 continue;
 
-            if (!TryReadBlock(file, offset, size, out var block))
+            if (!TryReadBlock(file, offset, size, out byte[] block))
                 continue;
 
             Consider(Walk(block), ref best);
@@ -337,38 +337,38 @@ internal static class LevelDb
 
     internal static byte[] EncodeWal(ulong sequence, string key, string value)
     {
-        var batch = EncodeBatch(sequence, key, PackString(value));
-        var record = new byte[7 + batch.Length];
+        byte[] batch = EncodeBatch(sequence, key, PackString(value));
+        byte[] record = new byte[7 + batch.Length];
         record[4] = (byte)batch.Length;
         record[5] = (byte)(batch.Length >> 8);
         record[6] = 1;
         batch.CopyTo(record.AsSpan(7));
-        var crc = Crc32C.Mask(Crc32C.Compute(record.AsSpan(6, 1 + batch.Length)));
+        uint crc = Crc32C.Mask(Crc32C.Compute(record.AsSpan(6, 1 + batch.Length)));
         BitConverter.TryWriteBytes(record.AsSpan(0, 4), crc);
         return record;
     }
 
     internal static byte[] EncodeTable(ulong sequence, string key, string value)
     {
-        var user = Encoding.UTF8.GetBytes(key);
-        var packed = PackString(value);
-        var internalKey = new byte[user.Length + 8];
+        byte[] user = Encoding.UTF8.GetBytes(key);
+        byte[] packed = PackString(value);
+        byte[] internalKey = new byte[user.Length + 8];
         user.CopyTo(internalKey, 0);
         BitConverter.TryWriteBytes(internalKey.AsSpan(user.Length), (sequence << 8) | 1UL);
-        var data = EncodeBlock([(internalKey, packed)]);
-        var handle = new byte[VarintSize(0) + VarintSize((ulong)data.Length)];
-        var handlePos = 0;
+        byte[] data = EncodeBlock([(internalKey, packed)]);
+        byte[] handle = new byte[VarintSize(0) + VarintSize((ulong)data.Length)];
+        int handlePos = 0;
         WriteVarint(handle, ref handlePos, 0);
         WriteVarint(handle, ref handlePos, (ulong)data.Length);
-        var index = EncodeBlock([(internalKey, handle)]);
-        var footer = new byte[48];
-        var footerPos = 0;
+        byte[] index = EncodeBlock([(internalKey, handle)]);
+        byte[] footer = new byte[48];
+        int footerPos = 0;
         WriteVarint(footer, ref footerPos, 0);
         WriteVarint(footer, ref footerPos, 0);
         WriteVarint(footer, ref footerPos, (ulong)(data.Length + 5));
         WriteVarint(footer, ref footerPos, (ulong)index.Length);
         BitConverter.TryWriteBytes(footer.AsSpan(40), TableMagic);
-        var file = new byte[data.Length + 5 + index.Length + 5 + footer.Length];
+        byte[] file = new byte[data.Length + 5 + index.Length + 5 + footer.Length];
         data.CopyTo(file, 0);
         index.CopyTo(file, data.Length + 5);
         footer.CopyTo(file, data.Length + 5 + index.Length + 5);
@@ -380,19 +380,19 @@ internal static class LevelDb
         if (record.Length < 12)
             return;
 
-        var sequence = BitConverter.ToUInt64(record);
-        var count = BitConverter.ToInt32(record.Slice(8));
+        ulong sequence = BitConverter.ToUInt64(record);
+        int count = BitConverter.ToInt32(record.Slice(8));
         if (count < 0)
             return;
 
-        var pos = 12;
-        for (var i = 0; i < count && pos < record.Length; i++)
+        int pos = 12;
+        for (int i = 0; i < count && pos < record.Length; i++)
         {
-            var tag = record[pos++];
-            if (!TryReadVarint(record, ref pos, out var keyLength) || pos + (int)keyLength > record.Length)
+            byte tag = record[pos++];
+            if (!TryReadVarint(record, ref pos, out ulong keyLength) || pos + (int)keyLength > record.Length)
                 return;
 
-            var key = Encoding.UTF8.GetString(record.Slice(pos, (int)keyLength));
+            string key = Encoding.UTF8.GetString(record.Slice(pos, (int)keyLength));
             pos += (int)keyLength;
             if (tag == 0)
             {
@@ -400,7 +400,7 @@ internal static class LevelDb
                 continue;
             }
 
-            if (tag != 1 || !TryReadVarint(record, ref pos, out var valueLength) || pos + (int)valueLength > record.Length)
+            if (tag != 1 || !TryReadVarint(record, ref pos, out ulong valueLength) || pos + (int)valueLength > record.Length)
                 return;
 
             Consider(sequence + (ulong)i, key, record.Slice(pos, (int)valueLength), deleted: false, ref best);
@@ -410,16 +410,16 @@ internal static class LevelDb
 
     private static void Consider(IEnumerable<(byte[] Key, byte[] Value)> entries, ref GameChatLog.Found best)
     {
-        foreach (var entry in entries)
+        foreach ((byte[] Key, byte[] Value) entry in entries)
         {
             if (entry.Key.Length < 8)
                 continue;
 
-            var userLength = entry.Key.Length - 8;
-            var packed = BitConverter.ToUInt64(entry.Key, userLength);
-            var sequence = packed >> 8;
-            var deleted = (packed & 0xff) == 0;
-            var key = Encoding.UTF8.GetString(entry.Key, 0, userLength);
+            int userLength = entry.Key.Length - 8;
+            ulong packed = BitConverter.ToUInt64(entry.Key, userLength);
+            ulong sequence = packed >> 8;
+            bool deleted = (packed & 0xff) == 0;
+            string key = Encoding.UTF8.GetString(entry.Key, 0, userLength);
             Consider(sequence, key, entry.Value, deleted, ref best);
         }
     }
@@ -436,7 +436,7 @@ internal static class LevelDb
             return;
         }
 
-        var text = UnpackString(value);
+        string? text = UnpackString(value);
         if (text == null || !LogLines.TrySplitTranscript(text, out _, out _))
             return;
 
@@ -456,10 +456,10 @@ internal static class LevelDb
         if (size == 0 || size > MaxBlock || offset > (ulong)file.Length || offset + size + 5 > (ulong)file.Length)
             return false;
 
-        var start = (int)offset;
-        var length = (int)size;
-        var type = file[start + length];
-        var payload = file.AsSpan(start, length);
+        int start = (int)offset;
+        int length = (int)size;
+        byte type = file[start + length];
+        Span<byte> payload = file.AsSpan(start, length);
         if (type == 0)
         {
             block = payload.ToArray();
@@ -476,26 +476,26 @@ internal static class LevelDb
 
     private static List<(byte[] Key, byte[] Value)> Walk(byte[] data)
     {
-        var entries = new List<(byte[] Key, byte[] Value)>();
+        List<(byte[] Key, byte[] Value)> entries = new List<(byte[] Key, byte[] Value)>();
         if (data.Length < 4)
             return entries;
 
-        var restarts = BitConverter.ToInt32(data, data.Length - 4);
+        int restarts = BitConverter.ToInt32(data, data.Length - 4);
         if (restarts < 0 || restarts > 100_000)
             return entries;
 
-        var entriesEnd = data.Length - 4 - (restarts * 4);
+        int entriesEnd = data.Length - 4 - (restarts * 4);
         if (entriesEnd < 0)
             return entries;
 
-        var pos = 0;
-        var key = Array.Empty<byte>();
-        var span = data.AsSpan();
+        int pos = 0;
+        byte[] key = Array.Empty<byte>();
+        Span<byte> span = data.AsSpan();
         while (pos < entriesEnd)
         {
-            if (!TryReadVarint(span, ref pos, out var shared) ||
-                !TryReadVarint(span, ref pos, out var nonShared) ||
-                !TryReadVarint(span, ref pos, out var valueLength))
+            if (!TryReadVarint(span, ref pos, out ulong shared) ||
+                !TryReadVarint(span, ref pos, out ulong nonShared) ||
+                !TryReadVarint(span, ref pos, out ulong valueLength))
             {
                 break;
             }
@@ -503,12 +503,12 @@ internal static class LevelDb
             if (shared > (ulong)key.Length || pos + (int)nonShared + (int)valueLength > entriesEnd)
                 break;
 
-            var next = new byte[shared + nonShared];
+            byte[] next = new byte[shared + nonShared];
             if (shared > 0)
                 key.AsSpan(0, (int)shared).CopyTo(next);
             span.Slice(pos, (int)nonShared).CopyTo(next.AsSpan((int)shared));
             pos += (int)nonShared;
-            var value = span.Slice(pos, (int)valueLength).ToArray();
+            byte[] value = span.Slice(pos, (int)valueLength).ToArray();
             pos += (int)valueLength;
             key = next;
             entries.Add((key, value));
@@ -519,11 +519,11 @@ internal static class LevelDb
 
     private static byte[] EncodeBatch(ulong sequence, string key, byte[] value)
     {
-        var keyBytes = Encoding.UTF8.GetBytes(key);
-        var batch = new byte[12 + 1 + VarintSize((ulong)keyBytes.Length) + keyBytes.Length + VarintSize((ulong)value.Length) + value.Length];
+        byte[] keyBytes = Encoding.UTF8.GetBytes(key);
+        byte[] batch = new byte[12 + 1 + VarintSize((ulong)keyBytes.Length) + keyBytes.Length + VarintSize((ulong)value.Length) + value.Length];
         BitConverter.TryWriteBytes(batch.AsSpan(0, 8), sequence);
         BitConverter.TryWriteBytes(batch.AsSpan(8, 4), 1);
-        var pos = 12;
+        int pos = 12;
         batch[pos++] = 1;
         WriteVarint(batch, ref pos, (ulong)keyBytes.Length);
         keyBytes.CopyTo(batch.AsSpan(pos));
@@ -535,8 +535,8 @@ internal static class LevelDb
 
     private static byte[] EncodeBlock(IReadOnlyList<(byte[] Key, byte[] Value)> entries)
     {
-        using var body = new MemoryStream();
-        foreach (var entry in entries)
+        using MemoryStream body = new MemoryStream();
+        foreach ((byte[] Key, byte[] Value) entry in entries)
         {
             WriteVarint(body, 0);
             WriteVarint(body, (ulong)entry.Key.Length);
@@ -545,7 +545,7 @@ internal static class LevelDb
             body.Write(entry.Value);
         }
 
-        using var block = new MemoryStream();
+        using MemoryStream block = new MemoryStream();
         body.Position = 0;
         body.CopyTo(block);
         block.Write(BitConverter.GetBytes(0));
@@ -555,8 +555,8 @@ internal static class LevelDb
 
     internal static byte[] PackString(string text)
     {
-        var bytes = Encoding.UTF8.GetBytes(text);
-        using var stream = new MemoryStream();
+        byte[] bytes = Encoding.UTF8.GetBytes(text);
+        using MemoryStream stream = new MemoryStream();
         if (bytes.Length < 32)
         {
             stream.WriteByte((byte)(0xa0 | bytes.Length));
@@ -590,7 +590,7 @@ internal static class LevelDb
         if (value.Length == 0)
             return null;
 
-        var marker = value[0];
+        byte marker = value[0];
         if (marker >= 0xa0 && marker <= 0xbf)
             return Take(value, 1, marker & 0x1f);
 
@@ -629,7 +629,7 @@ internal static class LevelDb
     private static bool CrcMatches(ReadOnlySpan<byte> stored, byte type, ReadOnlySpan<byte> data)
     {
         Span<byte> header = [type];
-        var crc = Crc32C.Compute(header);
+        uint crc = Crc32C.Compute(header);
         crc = Crc32C.Append(crc, data);
         return BitConverter.ToUInt32(stored) == Crc32C.Mask(crc);
     }
@@ -637,10 +637,10 @@ internal static class LevelDb
     private static bool TryReadVarint(ReadOnlySpan<byte> data, ref int pos, out ulong value)
     {
         value = 0;
-        var shift = 0;
+        int shift = 0;
         while (pos < data.Length && shift <= 63)
         {
-            var piece = data[pos++];
+            byte piece = data[pos++];
             value |= (ulong)(piece & 0x7f) << shift;
             if ((piece & 0x80) == 0)
                 return true;
@@ -675,7 +675,7 @@ internal static class LevelDb
 
     private static int VarintSize(ulong value)
     {
-        var size = 1;
+        int size = 1;
         while (value >= 0x80)
         {
             value >>= 7;
@@ -695,7 +695,7 @@ internal static class Crc32C
     public static uint Append(uint crc, ReadOnlySpan<byte> data)
     {
         crc = ~crc;
-        foreach (var piece in data)
+        foreach (byte piece in data)
             crc = Table[(crc ^ piece) & 0xff] ^ (crc >> 8);
 
         return ~crc;
@@ -705,11 +705,11 @@ internal static class Crc32C
 
     private static uint[] Build()
     {
-        var table = new uint[256];
+        uint[] table = new uint[256];
         for (uint i = 0; i < 256; i++)
         {
-            var crc = i;
-            for (var bit = 0; bit < 8; bit++)
+            uint crc = i;
+            for (int bit = 0; bit < 8; bit++)
                 crc = (crc & 1) != 0 ? (crc >> 1) ^ 0x82f63b78u : crc >> 1;
 
             table[i] = crc;
@@ -726,22 +726,22 @@ internal static class Snappy
         output = [];
         try
         {
-            var pos = 0;
-            if (!TryVarint(data, ref pos, out var expected) || expected > 3_000_000)
+            int pos = 0;
+            if (!TryVarint(data, ref pos, out int expected) || expected > 3_000_000)
                 return false;
 
             output = new byte[expected];
-            var written = 0;
+            int written = 0;
             while (written < expected)
             {
                 if (pos >= data.Length)
                     return false;
 
-                var tag = data[pos++];
-                var kind = tag & 3;
+                byte tag = data[pos++];
+                int kind = tag & 3;
                 if (kind == 0)
                 {
-                    var literal = tag >> 2;
+                    int literal = tag >> 2;
                     int length;
                     if (literal < 60)
                     {
@@ -749,12 +749,12 @@ internal static class Snappy
                     }
                     else
                     {
-                        var extra = literal - 59;
+                        int extra = literal - 59;
                         if (extra is < 1 or > 4 || pos + extra > data.Length)
                             return false;
 
-                        var raw = 0;
-                        for (var i = 0; i < extra; i++)
+                        int raw = 0;
+                        for (int i = 0; i < extra; i++)
                             raw |= data[pos++] << (8 * i);
 
                         length = raw + 1;
@@ -801,7 +801,7 @@ internal static class Snappy
                 if (offset <= 0 || offset > written || written + copyLength > expected)
                     return false;
 
-                for (var i = 0; i < copyLength; i++)
+                for (int i = 0; i < copyLength; i++)
                     output[written + i] = output[written - offset + i];
 
                 written += copyLength;
@@ -819,10 +819,10 @@ internal static class Snappy
     private static bool TryVarint(ReadOnlySpan<byte> data, ref int pos, out int value)
     {
         value = 0;
-        var shift = 0;
+        int shift = 0;
         while (pos < data.Length && shift <= 28)
         {
-            var piece = data[pos++];
+            byte piece = data[pos++];
             value |= (piece & 0x7f) << shift;
             if ((piece & 0x80) == 0)
                 return true;

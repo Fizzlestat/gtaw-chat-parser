@@ -6,8 +6,14 @@ namespace GTAWChatParser;
 
 public readonly record struct ColorSpan(string Text, string? Hex);
 
+public readonly record struct TextPiece(string Text, Uri? Link);
+
 public static class ChatLog
 {
+    private static readonly Regex Link = new(
+        @"(?:https?://|www\.)[^\s<>""']+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
     private static readonly Regex ColorCode = new(
         @"\^#[0-9A-Fa-f]{6}",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -46,7 +52,7 @@ public static class ChatLog
 
     public static string FormatLine(string rawLine, DateTime capturedAt)
     {
-        var line = Collapse(rawLine);
+        string line = Collapse(rawLine);
         if (line.Length == 0)
             return string.Empty;
 
@@ -58,11 +64,11 @@ public static class ChatLog
 
     public static DateTime ResolveTimestamp(string rawLine, DateTime capturedAt)
     {
-        var match = TimestampPrefix.Match(SkipLeadingColorCodes(Collapse(rawLine)));
+        Match match = TimestampPrefix.Match(SkipLeadingColorCodes(Collapse(rawLine)));
         if (!match.Success)
             return capturedAt;
 
-        if (!DateTime.TryParseExact(match.Groups["time"].Value, ["H:mm:ss", "HH:mm:ss"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+        if (!DateTime.TryParseExact(match.Groups["time"].Value, ["H:mm:ss", "HH:mm:ss"], CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsed))
             return capturedAt;
 
         return capturedAt.Date.Add(parsed.TimeOfDay);
@@ -70,10 +76,10 @@ public static class ChatLog
 
     public static string Render(DateTime startedAt, IReadOnlyList<string> lines)
     {
-        var builder = new StringBuilder();
+        StringBuilder builder = new StringBuilder();
         builder.Append(CreateHeader(startedAt));
         builder.Append("\r\n");
-        foreach (var line in lines)
+        foreach (string line in lines)
         {
             builder.Append(line);
             builder.Append("\r\n");
@@ -84,22 +90,22 @@ public static class ChatLog
 
     public static string CreateHeader(DateTime startedAt)
     {
-        var date = startedAt.ToString("dd/MMM/yyyy", CultureInfo.InvariantCulture).ToUpperInvariant();
-        var time = startedAt.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+        string date = startedAt.ToString("dd/MMM/yyyy", CultureInfo.InvariantCulture).ToUpperInvariant();
+        string time = startedAt.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
         return $"[DATE: {date} | TIME: {time}]";
     }
 
     public static bool TryParseHeader(string line, out DateTime startedAt)
     {
         startedAt = default;
-        var match = HeaderPattern.Match(line.Trim());
+        Match match = HeaderPattern.Match(line.Trim());
         if (!match.Success)
             return false;
 
-        if (!DateTime.TryParseExact(match.Groups["date"].Value, "dd/MMM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+        if (!DateTime.TryParseExact(match.Groups["date"].Value, "dd/MMM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime date))
             return false;
 
-        if (!DateTime.TryParseExact(match.Groups["time"].Value, "HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var time))
+        if (!DateTime.TryParseExact(match.Groups["time"].Value, "HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime time))
             return false;
 
         startedAt = date.Date.Add(time.TimeOfDay);
@@ -108,11 +114,11 @@ public static class ChatLog
 
     public static int FindOverlap(IReadOnlyList<string> previous, IReadOnlyList<string> current)
     {
-        var max = Math.Min(previous.Count, current.Count);
-        for (var length = max; length > 0; length--)
+        int max = Math.Min(previous.Count, current.Count);
+        for (int length = max; length > 0; length--)
         {
-            var matches = true;
-            for (var i = 0; i < length; i++)
+            bool matches = true;
+            for (int i = 0; i < length; i++)
             {
                 if (!string.Equals(previous[previous.Count - length + i], current[i], StringComparison.Ordinal))
                 {
@@ -132,10 +138,10 @@ public static class ChatLog
 
     private static string SkipLeadingColorCodes(string line)
     {
-        var index = 0;
+        int index = 0;
         while (index < line.Length)
         {
-            var match = ColorCode.Match(line, index);
+            Match match = ColorCode.Match(line, index);
             if (!match.Success || match.Index != index)
                 break;
 
@@ -147,8 +153,8 @@ public static class ChatLog
 
     public static IReadOnlyList<ColorSpan> SplitColorCodes(string line)
     {
-        var spans = new List<ColorSpan>();
-        var index = 0;
+        List<ColorSpan> spans = new List<ColorSpan>();
+        int index = 0;
         string? hex = null;
         foreach (Match match in ColorCode.Matches(line))
         {
@@ -165,6 +171,67 @@ public static class ChatLog
         return spans;
     }
 
+    public static List<TextPiece> SplitLinks(string text)
+    {
+        List<TextPiece> pieces = new List<TextPiece>();
+        int index = 0;
+        foreach (Match match in Link.Matches(text))
+        {
+            if (match.Index > index)
+                AddPlain(pieces, text[index..match.Index]);
+
+            string raw = match.Value.TrimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}', '>');
+            string tail = match.Value[raw.Length..];
+            if (TryCreateLink(raw, out Uri? link))
+            {
+                pieces.Add(new TextPiece(raw, link));
+                AddPlain(pieces, tail);
+            }
+            else
+            {
+                AddPlain(pieces, match.Value);
+            }
+
+            index = match.Index + match.Length;
+        }
+
+        if (index < text.Length)
+            AddPlain(pieces, text[index..]);
+
+        return pieces;
+    }
+
+    private static void AddPlain(List<TextPiece> pieces, string text)
+    {
+        if (text.Length == 0)
+            return;
+
+        if (pieces.Count > 0 && pieces[^1].Link == null)
+        {
+            TextPiece previous = pieces[^1];
+            pieces[^1] = previous with { Text = previous.Text + text };
+            return;
+        }
+
+        pieces.Add(new TextPiece(text, null));
+    }
+
+    private static bool TryCreateLink(string text, out Uri? link)
+    {
+        link = null;
+        if (text.Length == 0)
+            return false;
+
+        string candidate = text.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? "https://" + text : text;
+        if (!Uri.TryCreate(candidate, UriKind.Absolute, out Uri? uri))
+            return false;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            return false;
+
+        link = uri;
+        return true;
+    }
+
     public static string ForTranscript(string plain, string? colored, IEnumerable<string> keywords, bool caseSensitive = false)
     {
         if (FindKeywords(plain, keywords, caseSensitive).Count > 0)
@@ -178,9 +245,9 @@ public static class ChatLog
 
     private static bool SameMessage(string plain, string colored)
     {
-        var stripped = StripColorCodes(colored).Trim();
-        var plainTime = TimestampPrefix.Match(plain);
-        var coloredTime = TimestampPrefix.Match(stripped);
+        string stripped = StripColorCodes(colored).Trim();
+        Match plainTime = TimestampPrefix.Match(plain);
+        Match coloredTime = TimestampPrefix.Match(stripped);
         if (plainTime.Success && coloredTime.Success &&
             !string.Equals(plainTime.Groups["time"].Value, coloredTime.Groups["time"].Value, StringComparison.Ordinal))
         {
@@ -193,9 +260,9 @@ public static class ChatLog
 
     public static string WithFallbackColor(string line)
     {
-        var match = TimestampPrefix.Match(line);
-        var body = match.Success ? line[match.Length..] : line;
-        var hex = FallbackHex(body);
+        Match match = TimestampPrefix.Match(line);
+        string body = match.Success ? line[match.Length..] : line;
+        string? hex = FallbackHex(body);
         if (hex == null)
             return line;
 
@@ -224,12 +291,12 @@ public static class ChatLog
 
     public static IReadOnlyList<string> FindKeywords(string formattedLine, IEnumerable<string> keywords, bool caseSensitive = false)
     {
-        var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        var body = TimestampPrefix.Replace(formattedLine, string.Empty);
-        var found = new List<string>();
-        foreach (var keyword in keywords)
+        StringComparison comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        string body = TimestampPrefix.Replace(formattedLine, string.Empty);
+        List<string> found = new List<string>();
+        foreach (string keyword in keywords)
         {
-            var trimmed = keyword.Trim();
+            string trimmed = keyword.Trim();
             if (trimmed.Length == 0)
                 continue;
 
@@ -248,10 +315,10 @@ public static class ChatLog
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
 
-        var flattened = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
-        var builder = new StringBuilder(flattened.Length);
-        var pendingSpace = false;
-        foreach (var character in flattened)
+        string flattened = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        StringBuilder builder = new StringBuilder(flattened.Length);
+        bool pendingSpace = false;
+        foreach (char character in flattened)
         {
             if (char.IsWhiteSpace(character))
             {

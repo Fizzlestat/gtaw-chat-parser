@@ -1,7 +1,9 @@
-using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Windows.Documents;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Navigation;
 using System.Windows.Threading;
 
 namespace GTAWChatParser;
@@ -13,7 +15,7 @@ public partial class MainWindow : Window
     private readonly CancellationTokenSource _shutdown = new();
     private readonly DispatcherTimer _refreshTimer;
     private readonly DispatcherTimer _noticeTimer;
-    private readonly ObservableCollection<TranscriptLine> _lines = [];
+    private readonly List<Paragraph> _paragraphs = [];
     private readonly TrayIcon _tray;
 
     private Task? _captureTask;
@@ -59,7 +61,7 @@ public partial class MainWindow : Window
         VersionText.Text = AppUpdate.DisplayVersion;
         Title = "GTA: World Chat Parser " + AppUpdate.DisplayVersion;
         Icon = AppIcon.Image;
-        ChatList.ItemsSource = _lines;
+        ChatView.AddHandler(Hyperlink.RequestNavigateEvent, new RequestNavigateEventHandler(OpenTranscriptLink));
 
         _tray = new TrayIcon(this);
         _tray.OpenRequested += RestoreFromTray;
@@ -83,10 +85,10 @@ public partial class MainWindow : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        var hwnd = new WindowInteropHelper(this).Handle;
+        nint hwnd = new WindowInteropHelper(this).Handle;
         try
         {
-            var style = GetClassLongPtr(hwnd, -26);
+            nint style = GetClassLongPtr(hwnd, -26);
             SetClassLongPtr(hwnd, -26, new IntPtr(style.ToInt64() | 0x00020000));
         }
         catch (EntryPointNotFoundException)
@@ -131,7 +133,7 @@ public partial class MainWindow : Window
             {
                 try
                 {
-                    var accepted = IsVisible
+                    bool accepted = IsVisible
                         ? ConfirmWindow.Ask(this)
                         : ConfirmWindow.Ask(null);
                     if (!accepted)
@@ -230,7 +232,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            var path = _service.SaveNow();
+            string? path = _service.SaveNow();
             if (path == null)
             {
                 ShowNotice("There is no captured chat to save yet.");
@@ -252,7 +254,7 @@ public partial class MainWindow : Window
         try
         {
             Directory.CreateDirectory(_config.BackupDirectory);
-            var target = _lastLogPath != null && File.Exists(_lastLogPath)
+            string target = _lastLogPath != null && File.Exists(_lastLogPath)
                 ? _lastLogPath
                 : _config.BackupDirectory;
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
@@ -270,7 +272,7 @@ public partial class MainWindow : Window
 
     private void ChangeFolder_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new Microsoft.Win32.OpenFolderDialog
+        Microsoft.Win32.OpenFolderDialog dialog = new Microsoft.Win32.OpenFolderDialog
         {
             Title = "Choose the folder that already contains your GTAW logs. New files are saved under Year\\MON inside it.",
             InitialDirectory = Directory.Exists(_config.BackupDirectory)
@@ -287,6 +289,79 @@ public partial class MainWindow : Window
     }
 
     private void Notifications_Changed(object sender, RoutedEventArgs e) => SaveNotificationSettings();
+
+    private void ChooseSound_Click(object sender, RoutedEventArgs e)
+    {
+        Microsoft.Win32.OpenFileDialog dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Choose a notification sound",
+            Filter = "Sound files (*.mp3;*.wav;*.ogg)|*.mp3;*.wav;*.ogg",
+            CheckFileExists = true,
+            DereferenceLinks = true
+        };
+        string? currentDirectory = Path.GetDirectoryName(_config.NotificationSoundPath);
+        if (!string.IsNullOrWhiteSpace(currentDirectory) && Directory.Exists(currentDirectory))
+            dialog.InitialDirectory = currentDirectory;
+
+        if (dialog.ShowDialog(this) != true || string.IsNullOrWhiteSpace(dialog.FileName))
+            return;
+
+        if (!NotificationSounds.IsSupportedFile(dialog.FileName))
+        {
+            ShowNotice("Choose an .mp3, .wav, or .ogg file.");
+            return;
+        }
+
+        if (!TryPlaySound(dialog.FileName))
+            return;
+
+        _config.NotificationSoundPath = dialog.FileName;
+        _config.Save();
+        BindSoundFile();
+    }
+
+    private void PreviewSound_Click(object sender, RoutedEventArgs e) => TryPlaySound(_config.NotificationSoundPath);
+
+    private bool TryPlaySound(string? path)
+    {
+        if (NotificationSounds.IsLongerThanLimit(path))
+        {
+            ShowNotice("That sound is longer than 2 seconds.");
+            return false;
+        }
+
+        if (!NotificationPing.Play(path, fallbackToDefault: false))
+        {
+            ShowNotice("That sound could not be played.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private void ResetSound_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_config.NotificationSoundPath))
+            return;
+
+        _config.NotificationSoundPath = "";
+        _config.Save();
+        BindSoundFile();
+    }
+
+    private void BindSoundFile()
+    {
+        string path = _config.NotificationSoundPath;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            SoundFileText.Text = "Default";
+            SoundFileText.ToolTip = null;
+            return;
+        }
+
+        SoundFileText.Text = Path.GetFileName(path);
+        SoundFileText.ToolTip = path;
+    }
 
     private void Animation_Click(object sender, RoutedEventArgs e)
     {
@@ -321,6 +396,7 @@ public partial class MainWindow : Window
         SecondsBox.Text = _lastSeconds.ToString();
         _animation = _config.NotificationAnimation;
         MarkAnimation();
+        BindSoundFile();
         _binding = false;
         BindAppearance();
     }
@@ -330,14 +406,14 @@ public partial class MainWindow : Window
         _themeBinding = true;
         if (UiFontBox.Items.Count == 0)
         {
-            var fonts = Fonts.SystemFontFamilies.Select(family => family.Source).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name).ToList();
+            List<string> fonts = Fonts.SystemFontFamilies.Select(family => family.Source).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name).ToList();
             UiFontBox.ItemsSource = fonts;
             TranscriptFontBox.ItemsSource = fonts;
         }
 
-        if (HudPalette.TryParse(_config.PrimaryColor, out var primary))
+        if (HudPalette.TryParse(_config.PrimaryColor, out Color primary))
             PrimaryWell.SetColor(primary);
-        if (HudPalette.TryParse(_config.SecondaryColor, out var secondary))
+        if (HudPalette.TryParse(_config.SecondaryColor, out Color secondary))
             SecondaryWell.SetColor(secondary);
         UiFontBox.SelectedItem = HudPalette.NormalizeFont(_config.UiFont, HudPalette.DefaultUiFont);
         TranscriptFontBox.SelectedItem = HudPalette.NormalizeFont(_config.TranscriptFont, HudPalette.DefaultTranscriptFont);
@@ -412,7 +488,7 @@ public partial class MainWindow : Window
 
     private void CommitDuration()
     {
-        if (!int.TryParse(SecondsBox.Text.Trim(), out var seconds) || seconds is < 1 or > 60)
+        if (!int.TryParse(SecondsBox.Text.Trim(), out int seconds) || seconds is < 1 or > 60)
         {
             SecondsBox.Text = _lastSeconds.ToString();
             return;
@@ -451,11 +527,11 @@ public partial class MainWindow : Window
 
     private void SetSection(int index)
     {
-        var openKeywords = index == 0 && KeywordsBody.Visibility != Visibility.Visible;
-        var openLogs = index == 1 && LogsBody.Visibility != Visibility.Visible;
-        var openNotifications = index == 2 && NotificationsBody.Visibility != Visibility.Visible;
-        var openAppearance = index == 3 && AppearanceBody.Visibility != Visibility.Visible;
-        var openStartup = index == 4 && StartupBody.Visibility != Visibility.Visible;
+        bool openKeywords = index == 0 && KeywordsBody.Visibility != Visibility.Visible;
+        bool openLogs = index == 1 && LogsBody.Visibility != Visibility.Visible;
+        bool openNotifications = index == 2 && NotificationsBody.Visibility != Visibility.Visible;
+        bool openAppearance = index == 3 && AppearanceBody.Visibility != Visibility.Visible;
+        bool openStartup = index == 4 && StartupBody.Visibility != Visibility.Visible;
         AnimateSection(KeywordsBody, KeywordsScale, KeywordsAngle, openKeywords);
         AnimateSection(LogsBody, LogsScale, LogsAngle, openLogs);
         AnimateSection(NotificationsBody, NotificationsScale, NotificationsAngle, openNotifications);
@@ -515,7 +591,7 @@ public partial class MainWindow : Window
 
     private static Color TransparentSide()
     {
-        var side = ThemeColor("SideBrush");
+        Color side = ThemeColor("SideBrush");
         return Color.FromArgb(0, side.R, side.G, side.B);
     }
 
@@ -541,14 +617,14 @@ public partial class MainWindow : Window
         if (open)
             body.Visibility = Visibility.Visible;
 
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        CubicEase ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(open ? 1 : 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
         angle.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(open ? 90 : 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
         body.BeginAnimation(OpacityProperty, new DoubleAnimation(open ? 1 : 0, TimeSpan.FromMilliseconds(160)) { EasingFunction = ease });
         if (open)
             return;
 
-        var hide = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(190) };
+        DispatcherTimer hide = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(190) };
         hide.Tick += (_, _) =>
         {
             hide.Stop();
@@ -564,10 +640,10 @@ public partial class MainWindow : Window
         if (!_config.NotificationsEnabled || GameProcess.IsFiveMFocused())
             return;
 
-        var hits = new List<(string Keywords, string Line)>();
-        foreach (var line in lines)
+        List<(string Keywords, string Line)> hits = new List<(string Keywords, string Line)>();
+        foreach (string line in lines)
         {
-            var matched = ChatLog.FindKeywords(line, _config.Keywords, _config.NotificationCaseSensitive);
+            IReadOnlyList<string> matched = ChatLog.FindKeywords(line, _config.Keywords, _config.NotificationCaseSensitive);
             if (matched.Count > 0)
                 hits.Add((string.Join(", ", matched), line));
         }
@@ -576,7 +652,7 @@ public partial class MainWindow : Window
             return;
 
         AppLog.Info($"Keyword alert for {hits.Count} line(s).");
-        KeywordToastWindow.ShowMatches(hits, _config.ResolvedNotificationSeconds, _config.ResolvedNotificationAnimation, _config.NotificationSoundEnabled);
+        KeywordToastWindow.ShowMatches(hits, _config.ResolvedNotificationSeconds, _config.ResolvedNotificationAnimation, _config.NotificationSoundEnabled, _config.NotificationSoundPath);
     }
 
     private void OnLogSaved(string path, bool gameClosed)
@@ -586,6 +662,7 @@ public partial class MainWindow : Window
             return;
 
         ShowNotice("Chat log saved. " + path);
+        KeywordToastWindow.ShowSavedLog(path, _config.ResolvedNotificationSeconds, _config.ResolvedNotificationAnimation, _config.NotificationSoundEnabled, _config.NotificationSoundPath);
         if (WindowState == WindowState.Minimized || !IsVisible)
             FlashWindow(new WindowInteropHelper(this).Handle, true);
     }
@@ -625,7 +702,7 @@ public partial class MainWindow : Window
     private void HideNotice()
     {
         _noticeTimer.Stop();
-        var animation = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140));
+        DoubleAnimation animation = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140));
         animation.Completed += (_, _) =>
         {
             NoticeBar.Visibility = Visibility.Collapsed;
@@ -637,32 +714,111 @@ public partial class MainWindow : Window
     private void RenderChat(string snapshot, bool force = false)
     {
         _ = snapshot;
-        var transcript = string.Join("\n", _service.GetTranscript(_config.Keywords, _config.NotificationCaseSensitive));
+        string transcript = string.Join("\n", _service.GetTranscript(_config.Keywords, _config.NotificationCaseSensitive));
         if (!force && transcript == _rendered)
             return;
 
-        var follow = _rendered.Length == 0 || IsNearBottom();
+        bool follow = _rendered.Length == 0 || IsNearBottom();
         _rendered = transcript;
-        _lines.Clear();
-        foreach (var line in transcript.Split('\n'))
+        List<string> visible = new List<string>();
+        foreach (string line in transcript.Split('\n'))
         {
-            if (line.Length == 0)
-                continue;
-
-            _lines.Add(new TranscriptLine(line, LineBrush(line), line.Contains("^#", StringComparison.Ordinal)));
+            if (line.Length > 0)
+                visible.Add(line);
         }
 
-        var hasText = _lines.Count > 0;
-        EmptyState.Visibility = hasText ? Visibility.Collapsed : Visibility.Visible;
-        ChatList.Visibility = hasText ? Visibility.Visible : Visibility.Collapsed;
-        if (hasText && follow)
+        while (_paragraphs.Count > visible.Count)
         {
-            Dispatcher.BeginInvoke(() =>
+            ChatDocument.Blocks.Remove(_paragraphs[^1]);
+            _paragraphs.RemoveAt(_paragraphs.Count - 1);
+        }
+
+        for (int i = 0; i < visible.Count; i++)
+        {
+            if (i == _paragraphs.Count)
             {
-                if (_lines.Count > 0)
-                    ChatList.ScrollIntoView(_lines[^1]);
-            }, DispatcherPriority.Background);
+                Paragraph paragraph = new Paragraph { Margin = new Thickness(0, 1, 0, 1) };
+                FillParagraph(paragraph, visible[i]);
+                ChatDocument.Blocks.Add(paragraph);
+                _paragraphs.Add(paragraph);
+                continue;
+            }
+
+            if (!Equals(_paragraphs[i].Tag, visible[i]))
+                FillParagraph(_paragraphs[i], visible[i]);
         }
+
+        bool hasText = visible.Count > 0;
+        EmptyState.Visibility = hasText ? Visibility.Collapsed : Visibility.Visible;
+        ChatView.Visibility = hasText ? Visibility.Visible : Visibility.Collapsed;
+        if (hasText && follow)
+            Dispatcher.BeginInvoke(ScrollTranscriptToEnd, DispatcherPriority.Background);
+    }
+
+    private void FillParagraph(Paragraph paragraph, string line)
+    {
+        paragraph.Tag = line;
+        paragraph.Inlines.Clear();
+        Brush foreground = LineBrush(line);
+        TranscriptLine transcriptLine = new TranscriptLine(line, foreground, line.Contains("^#", StringComparison.Ordinal));
+        foreach (TranscriptRun run in transcriptLine.Runs)
+        {
+            foreach (TextPiece piece in ChatLog.SplitLinks(run.Text))
+            {
+                if (piece.Text.Length == 0)
+                    continue;
+
+                if (piece.Link == null)
+                {
+                    paragraph.Inlines.Add(new Run(piece.Text) { Foreground = run.Brush });
+                    continue;
+                }
+
+                Hyperlink link = new Hyperlink(new Run(piece.Text))
+                {
+                    NavigateUri = piece.Link,
+                    Foreground = run.Brush,
+                    Cursor = Cursors.Hand,
+                    TextDecorations = TextDecorations.Underline
+                };
+                Style style = new Style(typeof(Hyperlink));
+                style.Setters.Add(new Setter(TextElement.ForegroundProperty, run.Brush));
+                style.Setters.Add(new Setter(Hyperlink.TextDecorationsProperty, TextDecorations.Underline));
+                style.Setters.Add(new Setter(FrameworkContentElement.CursorProperty, Cursors.Hand));
+                link.Style = style;
+                paragraph.Inlines.Add(link);
+            }
+        }
+    }
+
+    private void OpenTranscriptLink(object sender, RequestNavigateEventArgs e)
+    {
+        e.Handled = true;
+        try
+        {
+            if (e.Uri.Scheme != Uri.UriSchemeHttp && e.Uri.Scheme != Uri.UriSchemeHttps)
+                return;
+
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Could not open the link.", exception);
+            ShowNotice("Could not open that link.");
+        }
+    }
+
+    private void ChatView_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        double width = Math.Max(ChatView.ActualWidth, 100);
+        ChatDocument.PageWidth = width;
+        ChatDocument.ColumnWidth = width;
+    }
+
+    private void ScrollTranscriptToEnd()
+    {
+        ScrollViewer? scroll = FindDescendant<ScrollViewer>(ChatView);
+        scroll?.ScrollToEnd();
     }
 
     private Brush LineBrush(string line)
@@ -677,10 +833,10 @@ public partial class MainWindow : Window
 
     private bool IsNearBottom()
     {
-        if (ChatList.Items.Count == 0)
+        if (_paragraphs.Count == 0)
             return true;
 
-        var scroll = FindDescendant<ScrollViewer>(ChatList);
+        ScrollViewer? scroll = FindDescendant<ScrollViewer>(ChatView);
         return scroll == null || scroll.ScrollableHeight - scroll.VerticalOffset < 32;
     }
 
@@ -689,7 +845,7 @@ public partial class MainWindow : Window
         if (_binding)
             return;
 
-        var enabled = StartupToggle.IsChecked == true;
+        bool enabled = StartupToggle.IsChecked == true;
         UpdateTrayStartupEnabled();
         try
         {
@@ -723,7 +879,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var minimized = TrayStartupToggle.IsChecked == true;
+        bool minimized = TrayStartupToggle.IsChecked == true;
         try
         {
             WindowsStartup.Apply(true, minimized);
@@ -744,7 +900,7 @@ public partial class MainWindow : Window
 
     private void UpdateTrayStartupEnabled()
     {
-        var enabled = StartupToggle.IsChecked == true;
+        bool enabled = StartupToggle.IsChecked == true;
         TrayStartupToggle.IsEnabled = enabled;
         TrayStartupLabel.Opacity = enabled ? 1 : 0.45;
     }
@@ -800,8 +956,8 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var message = "Version " + offer.Version + " is ready. The parser will close, install it, and open again.";
-            var accepted = IsVisible
+            string message = "Version " + offer.Version + " is ready. The parser will close, install it, and open again.";
+            bool accepted = IsVisible
                 ? ConfirmWindow.Ask(this, "Update available", message, "Update")
                 : ConfirmWindow.Ask(null, "Update available", message, "Update");
             if (!accepted || _closing)
@@ -892,9 +1048,9 @@ public partial class MainWindow : Window
         if (root is T match)
             return match;
 
-        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
         {
-            var found = FindDescendant<T>(VisualTreeHelper.GetChild(root, i));
+            T? found = FindDescendant<T>(VisualTreeHelper.GetChild(root, i));
             if (found != null)
                 return found;
         }
@@ -935,8 +1091,8 @@ internal sealed class TranscriptLine
             return;
         }
 
-        var runs = new List<TranscriptRun>();
-        foreach (var span in ChatLog.SplitColorCodes(text))
+        List<TranscriptRun> runs = new List<TranscriptRun>();
+        foreach (ColorSpan span in ChatLog.SplitColorCodes(text))
         {
             if (span.Text.Length == 0)
                 continue;
@@ -951,39 +1107,11 @@ internal sealed class TranscriptLine
 
     private static Brush ColorBrush(string hex, Brush fallback)
     {
-        if (!HudPalette.TryParse(hex, out var color))
+        if (!HudPalette.TryParse(hex, out Color color))
             return fallback;
 
-        var brush = new SolidColorBrush(color);
+        SolidColorBrush brush = new SolidColorBrush(color);
         brush.Freeze();
         return brush;
-    }
-}
-
-internal sealed class TranscriptBlock : TextBlock
-{
-    public static readonly DependencyProperty RunsProperty = DependencyProperty.Register(
-        nameof(Runs),
-        typeof(IEnumerable<TranscriptRun>),
-        typeof(TranscriptBlock),
-        new PropertyMetadata(null, OnRunsChanged));
-
-    public IEnumerable<TranscriptRun>? Runs
-    {
-        get => (IEnumerable<TranscriptRun>?)GetValue(RunsProperty);
-        set => SetValue(RunsProperty, value);
-    }
-
-    private static void OnRunsChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
-    {
-        if (sender is not TranscriptBlock block)
-            return;
-
-        block.Inlines.Clear();
-        if (args.NewValue is not IEnumerable<TranscriptRun> runs)
-            return;
-
-        foreach (var run in runs)
-            block.Inlines.Add(new System.Windows.Documents.Run(run.Text) { Foreground = run.Brush });
     }
 }

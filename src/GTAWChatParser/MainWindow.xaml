@@ -78,30 +78,19 @@
                         </Grid.RowDefinitions>
                         <TextBlock Text="LIVE TRANSCRIPT" Foreground="{DynamicResource FrameBrush}" FontSize="12" FontWeight="Bold" Margin="16,0,0,0" VerticalAlignment="Center"/>
                         <TextBlock x:Name="EmptyState" Grid.Row="1" Text="Waiting for FiveM.&#x0a;Chat already on screen is picked up as soon as the HUD attaches." Foreground="{DynamicResource MutedBrush}" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        <ListBox x:Name="ChatList" Grid.Row="1" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource LineBrush}"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True"
-                                 VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.ScrollUnit="Pixel"
-                                 FontFamily="{DynamicResource TranscriptFont}" FontSize="14" Padding="12,4,8,12" Visibility="Collapsed">
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem">
-                                    <Setter Property="Padding" Value="0,1"/>
-                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                    <Setter Property="Focusable" Value="False"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="ListBoxItem">
-                                                <ContentPresenter/>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </ListBox.ItemContainerStyle>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <local:TranscriptBlock Runs="{Binding Runs}" TextWrapping="Wrap" FontFamily="{DynamicResource TranscriptFont}" FontSize="14"/>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                        <FlowDocumentScrollViewer x:Name="ChatView" Grid.Row="1" Background="Transparent" BorderThickness="0"
+                                 IsToolBarVisible="False" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                 FontFamily="{DynamicResource TranscriptFont}" FontSize="14" Foreground="{DynamicResource LineBrush}"
+                                 Visibility="Collapsed" SizeChanged="ChatView_SizeChanged" Focusable="True">
+                            <FlowDocumentScrollViewer.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
+                                    <MenuItem Header="Select all" Command="ApplicationCommands.SelectAll"/>
+                                </ContextMenu>
+                            </FlowDocumentScrollViewer.ContextMenu>
+                            <FlowDocument x:Name="ChatDocument" Background="Transparent" PagePadding="12,4,8,12"
+                                          FontFamily="{DynamicResource TranscriptFont}" FontSize="14" Foreground="{DynamicResource LineBrush}"/>
+                        </FlowDocumentScrollViewer>
                     </Grid>
                 </Border>
 
@@ -173,6 +162,13 @@
                                             <CheckBox x:Name="SoundToggle" Style="{StaticResource HudToggle}" DockPanel.Dock="Right" Checked="Notifications_Changed" Unchecked="Notifications_Changed"/>
                                             <TextBlock Text="Sound" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
                                         </DockPanel>
+                                        <TextBlock Text="Sound file, 2 seconds or less" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,6"/>
+                                        <TextBlock x:Name="SoundFileText" Text="Default" Foreground="{DynamicResource TextBrush}" TextTrimming="CharacterEllipsis" Margin="0,0,0,8"/>
+                                        <UniformGrid Columns="3" Margin="0,0,0,8">
+                                            <Button Content="Choose" Style="{StaticResource HudButton}" Margin="0,0,4,0" Click="ChooseSound_Click"/>
+                                            <Button Content="Play" Style="{StaticResource HudButton}" Margin="4,0" Click="PreviewSound_Click"/>
+                                            <Button Content="Default" Style="{StaticResource HudButton}" Margin="4,0,0,0" Click="ResetSound_Click"/>
+                                        </UniformGrid>
                                         <DockPanel Margin="0,0,0,8">
                                             <CheckBox x:Name="CaseToggle" Style="{StaticResource HudToggle}" DockPanel.Dock="Right" Checked="Notifications_Changed" Unchecked="Notifications_Changed"/>
                                             <TextBlock Text="Case sensitive" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>

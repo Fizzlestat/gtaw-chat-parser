@@ -10,7 +10,7 @@ public partial class App : Application
     {
         LaunchInTray = e.Args.Any(arg => arg.Equals("--tray", StringComparison.OrdinalIgnoreCase));
         _instance = new Mutex(false, @"Local\GTAWChatParser", out _);
-        var acquired = false;
+        bool acquired = false;
         try
         {
             acquired = _instance.WaitOne(0);
@@ -39,7 +39,7 @@ public partial class App : Application
         };
         SessionEnding += (_, _) => _systemShutdown = true;
 
-        var window = new MainWindow();
+        MainWindow window = new MainWindow();
         MainWindow = window;
         if (LaunchInTray)
         {

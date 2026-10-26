@@ -9,7 +9,7 @@ internal static class WindowsStartup
 
     public static void Apply(bool enabled, bool minimized)
     {
-        using var key = Registry.CurrentUser.CreateSubKey(RunKey, writable: true)
+        using RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKey, writable: true)
             ?? throw new InvalidOperationException("Windows startup settings could not be opened.");
 
         if (!enabled)
@@ -18,7 +18,7 @@ internal static class WindowsStartup
             return;
         }
 
-        var path = Environment.ProcessPath;
+        string? path = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(path))
             throw new InvalidOperationException("The parser path could not be found.");
 
