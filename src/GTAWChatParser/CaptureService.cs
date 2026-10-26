@@ -15,7 +15,7 @@ public sealed class CaptureService : IDisposable
     private string? _lastSavedPath;
     private bool _disposed;
     private DateTime _nextPortScan = DateTime.MinValue;
-    private string? _lastStatus;
+    private CaptureStatus? _lastStatus;
     private bool _gameLogAnnounced;
 
     public CaptureService(AppConfig config)
@@ -24,7 +24,7 @@ public sealed class CaptureService : IDisposable
         _reader = new NuiChatClient(() => _config.ResolvedDevtoolsPort);
     }
 
-    public event Action<string>? StatusChanged;
+    public event Action<CaptureStatus>? StatusChanged;
 
     public event Action<IReadOnlyList<string>>? LinesAppended;
 
@@ -130,16 +130,16 @@ public sealed class CaptureService : IDisposable
                             previous.Clear();
                             baselineTaken = false;
                             missingSince = null;
-                            SetStatus("Log saved. Waiting for FiveM");
+                            SetStatus(new CaptureStatus(CaptureStatusKind.Saved, 0));
                         }
                         else
                         {
-                            SetStatus("Game closed, saving the log...");
+                            SetStatus(new CaptureStatus(CaptureStatusKind.Saving, 0));
                         }
                     }
                     else
                     {
-                        SetStatus("Waiting for FiveM");
+                        SetStatus(new CaptureStatus(CaptureStatusKind.WaitingForFiveM, 0));
                     }
 
                     await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
@@ -223,7 +223,9 @@ public sealed class CaptureService : IDisposable
                 }
 
                 AppendGameLog();
-                SetStatus(HasSession() ? $"Capturing · {LineCount()} lines" : "Waiting for GTAW chat");
+                SetStatus(HasSession()
+                    ? new CaptureStatus(CaptureStatusKind.Capturing, LineCount())
+                    : new CaptureStatus(CaptureStatusKind.WaitingForChat, 0));
                 if (IsDirty() && DateTime.UtcNow - lastArchive >= ArchiveInterval)
                 {
                     string? path = SaveNow();
@@ -253,12 +255,12 @@ public sealed class CaptureService : IDisposable
                         previous.Clear();
                         baselineTaken = false;
                         missingSince = null;
-                        SetStatus("Log saved. Waiting for FiveM");
+                        SetStatus(new CaptureStatus(CaptureStatusKind.Saved, 0));
                         await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
                         continue;
                     }
 
-                    SetStatus("Game closed, saving the log...");
+                    SetStatus(new CaptureStatus(CaptureStatusKind.Saving, 0));
                     await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
                     continue;
                 }
@@ -273,8 +275,10 @@ public sealed class CaptureService : IDisposable
 
                 bool searching = (presence.ClientRunning || presence.GameRunning) && ShouldSearchPort(exception);
                 SetStatus(HasSession()
-                    ? $"Capturing · {LineCount()} lines"
-                    : searching ? "Looking for GTAW chat" : "Waiting for GTAW chat");
+                    ? new CaptureStatus(CaptureStatusKind.Capturing, LineCount())
+                    : searching
+                        ? new CaptureStatus(CaptureStatusKind.Looking, 0)
+                        : new CaptureStatus(CaptureStatusKind.WaitingForChat, 0));
                 if (searching)
                     await SearchForInspectorAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -554,9 +558,9 @@ public sealed class CaptureService : IDisposable
         return true;
     }
 
-    private void SetStatus(string status)
+    private void SetStatus(CaptureStatus status)
     {
-        if (string.Equals(status, _lastStatus, StringComparison.Ordinal))
+        if (_lastStatus == status)
             return;
 
         _lastStatus = status;

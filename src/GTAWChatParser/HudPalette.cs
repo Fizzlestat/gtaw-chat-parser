@@ -43,8 +43,13 @@ internal static class HudPalette
         Put(resources, "OkBrush", Color.FromRgb(0x7E, 0xC4, 0x8C));
         Put(resources, "IdleBrush", Mix(text, secondary, 0.5));
 
-        resources["UiFont"] = new FontFamily(NormalizeFont(config.UiFont, DefaultUiFont));
-        resources["TranscriptFont"] = new FontFamily(NormalizeFont(config.TranscriptFont, DefaultTranscriptFont));
+        resources["UiFont"] = FontWithFallbacks(NormalizeFont(config.UiFont, DefaultUiFont));
+        resources["TranscriptFont"] = FontWithFallbacks(NormalizeFont(config.TranscriptFont, DefaultTranscriptFont));
+    }
+
+    private static FontFamily FontWithFallbacks(string family)
+    {
+        return new FontFamily(family + ", Malgun Gothic, Segoe UI, Arial");
     }
 
     public static string NormalizeHex(string? value, string fallback)

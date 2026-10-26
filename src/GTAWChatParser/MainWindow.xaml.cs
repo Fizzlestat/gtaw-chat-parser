@@ -19,7 +19,7 @@ public partial class MainWindow : Window
     private readonly TrayIcon _tray;
 
     private Task? _captureTask;
-    private string _status = "Starting";
+    private CaptureStatus _status = new(CaptureStatusKind.Starting, 0);
     private string _rendered = "\u0001";
     private string? _lastLogPath;
     private bool _started;
@@ -57,7 +57,9 @@ public partial class MainWindow : Window
         }
 
         HudPalette.Apply(_config);
+        Locale.Apply(_config.Language);
         InitializeComponent();
+        Locale.Changed += OnLocaleChanged;
         VersionText.Text = AppUpdate.DisplayVersion;
         Title = "GTA: World Chat Parser " + AppUpdate.DisplayVersion;
         Icon = AppIcon.Image;
@@ -78,7 +80,7 @@ public partial class MainWindow : Window
 
         BindFields();
         RefreshHeaders();
-        SetStatus("Starting");
+        SetStatus(new CaptureStatus(CaptureStatusKind.Starting, 0));
         AppLog.Info("Started.");
     }
 
@@ -224,7 +226,11 @@ public partial class MainWindow : Window
             _config.NotificationCaseSensitive);
         _config.Save();
         BindKeywords();
-        ShowNotice(_config.Keywords.Count == 0 ? "Keywords cleared." : $"Saved {_config.Keywords.Count} keyword{(_config.Keywords.Count == 1 ? "" : "s")}.");
+        ShowNotice(_config.Keywords.Count == 0
+            ? Locale.Get("noticeKeywordsCleared")
+            : _config.Keywords.Count == 1
+                ? Locale.Get("noticeKeywordSaved")
+                : Locale.Format("noticeKeywordsSaved", _config.Keywords.Count));
         RenderChat(_service.GetSnapshot(), force: true);
     }
 
@@ -235,17 +241,17 @@ public partial class MainWindow : Window
             string? path = _service.SaveNow();
             if (path == null)
             {
-                ShowNotice("There is no captured chat to save yet.");
+                ShowNotice(Locale.Get("noticeNothingToSave"));
                 return;
             }
 
             _lastLogPath = path;
-            ShowNotice("Saved " + path);
+            ShowNotice(Locale.Format("noticeSavedPath", path));
         }
         catch (Exception exception)
         {
             AppLog.Error("Manual save failed.", exception);
-            ShowNotice("The log could not be saved. " + exception.Message);
+            ShowNotice(Locale.Format("noticeSaveFailed", exception.Message));
         }
     }
 
@@ -266,7 +272,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            ShowNotice("Could not open the log folder. " + exception.Message);
+            ShowNotice(Locale.Format("noticeOpenFolderFailed", exception.Message));
         }
     }
 
@@ -274,7 +280,7 @@ public partial class MainWindow : Window
     {
         Microsoft.Win32.OpenFolderDialog dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = "Choose the folder that already contains your GTAW logs. New files are saved under Year\\MON inside it.",
+            Title = Locale.Get("dialogChooseFolder"),
             InitialDirectory = Directory.Exists(_config.BackupDirectory)
                 ? _config.BackupDirectory
                 : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
@@ -285,7 +291,7 @@ public partial class MainWindow : Window
         _config.BackupDirectory = dialog.FolderName;
         _config.Save();
         FolderText.Text = _config.BackupDirectory;
-        ShowNotice("Log folder updated.");
+        ShowNotice(Locale.Get("noticeFolderUpdated"));
     }
 
     private void Notifications_Changed(object sender, RoutedEventArgs e) => SaveNotificationSettings();
@@ -294,8 +300,8 @@ public partial class MainWindow : Window
     {
         Microsoft.Win32.OpenFileDialog dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Title = "Choose a notification sound",
-            Filter = "Sound files (*.mp3;*.wav;*.ogg)|*.mp3;*.wav;*.ogg",
+            Title = Locale.Get("dialogChooseSound"),
+            Filter = Locale.Get("dialogSoundFilter") + "|*.mp3;*.wav;*.ogg",
             CheckFileExists = true,
             DereferenceLinks = true
         };
@@ -308,7 +314,7 @@ public partial class MainWindow : Window
 
         if (!NotificationSounds.IsSupportedFile(dialog.FileName))
         {
-            ShowNotice("Choose an .mp3, .wav, or .ogg file.");
+            ShowNotice(Locale.Get("noticeSoundType"));
             return;
         }
 
@@ -326,13 +332,13 @@ public partial class MainWindow : Window
     {
         if (NotificationSounds.IsLongerThanLimit(path))
         {
-            ShowNotice("That sound is longer than 2 seconds.");
+            ShowNotice(Locale.Get("noticeSoundTooLong"));
             return false;
         }
 
         if (!NotificationPing.Play(path, fallbackToDefault: false))
         {
-            ShowNotice("That sound could not be played.");
+            ShowNotice(Locale.Get("noticeSoundFailed"));
             return false;
         }
 
@@ -354,7 +360,7 @@ public partial class MainWindow : Window
         string path = _config.NotificationSoundPath;
         if (string.IsNullOrWhiteSpace(path))
         {
-            SoundFileText.Text = "Default";
+            SoundFileText.Text = Locale.Get("soundDefault");
             SoundFileText.ToolTip = null;
             return;
         }
@@ -397,6 +403,7 @@ public partial class MainWindow : Window
         _animation = _config.NotificationAnimation;
         MarkAnimation();
         BindSoundFile();
+        BindLanguage();
         _binding = false;
         BindAppearance();
     }
@@ -661,31 +668,88 @@ public partial class MainWindow : Window
         if (!gameClosed)
             return;
 
-        ShowNotice("Chat log saved. " + path);
+        ShowNotice(Locale.Format("noticeLogSaved", path));
         KeywordToastWindow.ShowSavedLog(path, _config.ResolvedNotificationSeconds, _config.ResolvedNotificationAnimation, _config.NotificationSoundEnabled, _config.NotificationSoundPath);
         if (WindowState == WindowState.Minimized || !IsVisible)
             FlashWindow(new WindowInteropHelper(this).Handle, true);
     }
 
-    private void SetStatus(string status)
+    private void SetStatus(CaptureStatus status)
     {
-        if (string.Equals(status, _status, StringComparison.Ordinal))
-            return;
-
         _status = status;
-        StatusText.Text = status;
-        StatusDot.Fill = StatusBrush(status);
+        StatusText.Text = Locale.Describe(status);
+        StatusDot.Fill = StatusBrush(status.Kind);
     }
 
-    private static Brush StatusBrush(string status)
+    private static Brush StatusBrush(CaptureStatusKind kind)
     {
-        if (status.Contains("Capturing", StringComparison.OrdinalIgnoreCase))
+        if (kind == CaptureStatusKind.Capturing)
             return FindBrush("OkBrush");
-        if (status.Contains("Looking", StringComparison.OrdinalIgnoreCase)
-            || status.Contains("Waiting for GTAW", StringComparison.OrdinalIgnoreCase)
-            || status.Contains("saving", StringComparison.OrdinalIgnoreCase))
+        if (kind == CaptureStatusKind.Looking || kind == CaptureStatusKind.WaitingForChat || kind == CaptureStatusKind.Saving)
             return FindBrush("FrameBrush");
         return FindBrush("IdleBrush");
+    }
+
+    private void OnLocaleChanged()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(OnLocaleChanged);
+            return;
+        }
+
+        BindLanguage();
+        BindSoundFile();
+        SetStatus(_status);
+    }
+
+    private void Language_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_binding)
+            return;
+        if (LanguageBox.SelectedItem is not LanguageOption option)
+            return;
+        if (string.Equals(option.Code, _config.Language, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _config.Language = option.Code;
+        _config.Save();
+        Locale.Apply(option.Code);
+    }
+
+    private void BindLanguage()
+    {
+        bool previous = _binding;
+        _binding = true;
+        List<LanguageOption> options = new List<LanguageOption>();
+        LanguageOption? selected = null;
+        foreach (string code in Locale.Supported)
+        {
+            LanguageOption option = new LanguageOption(code, Locale.LanguageName(code));
+            options.Add(option);
+            if (string.Equals(code, Locale.Language, StringComparison.OrdinalIgnoreCase))
+                selected = option;
+        }
+
+        LanguageBox.DisplayMemberPath = "Label";
+        LanguageBox.ItemsSource = options;
+        LanguageBox.SelectedItem = selected;
+        _binding = previous;
+    }
+
+    private sealed class LanguageOption
+    {
+        public LanguageOption(string code, string label)
+        {
+            Code = code;
+            Label = label;
+        }
+
+        public string Code { get; }
+
+        public string Label { get; }
+
+        public override string ToString() => Label;
     }
 
     private void ShowNotice(string message)
@@ -804,15 +868,17 @@ public partial class MainWindow : Window
         catch (Exception exception)
         {
             AppLog.Error("Could not open the link.", exception);
-            ShowNotice("Could not open that link.");
+            ShowNotice(Locale.Get("noticeLinkFailed"));
         }
     }
 
     private void ChatView_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        double width = Math.Max(ChatView.ActualWidth, 100);
-        ChatDocument.PageWidth = width;
-        ChatDocument.ColumnWidth = width;
+        double pageWidth = Math.Max(ChatView.ActualWidth - SystemParameters.VerticalScrollBarWidth, 100);
+        ChatDocument.PageWidth = pageWidth;
+        Thickness padding = ChatDocument.PagePadding;
+        double columnWidth = pageWidth - padding.Left - padding.Right;
+        ChatDocument.ColumnWidth = Math.Max(columnWidth, 100);
     }
 
     private void ScrollTranscriptToEnd()
@@ -858,7 +924,7 @@ public partial class MainWindow : Window
             StartupToggle.IsChecked = _config.StartWithWindows;
             UpdateTrayStartupEnabled();
             _binding = false;
-            ShowNotice("Windows startup could not be changed.");
+            ShowNotice(Locale.Get("noticeStartupFailed"));
             return;
         }
 
@@ -890,7 +956,7 @@ public partial class MainWindow : Window
             _binding = true;
             TrayStartupToggle.IsChecked = _config.StartMinimizedToTray;
             _binding = false;
-            ShowNotice("Windows startup could not be changed.");
+            ShowNotice(Locale.Get("noticeStartupFailed"));
             return;
         }
 
@@ -931,7 +997,7 @@ public partial class MainWindow : Window
             try
             {
                 if (interactive)
-                    ShowNotice("Checking for updates...");
+                    ShowNotice(Locale.Get("noticeCheckingUpdates"));
                 offer = await AppUpdate.FindAsync(_updates.Token);
             }
             catch (OperationCanceledException) when (_closing || _updates.IsCancellationRequested)
@@ -942,7 +1008,7 @@ public partial class MainWindow : Window
             {
                 AppLog.Error("Update check failed.", exception);
                 if (interactive && !_closing)
-                    ShowNotice(exception is InvalidOperationException ? exception.Message : "Couldn't check for updates.");
+                    ShowNotice(exception is InvalidOperationException ? exception.Message : Locale.Get("noticeUpdateCheckFailed"));
                 return;
             }
 
@@ -952,18 +1018,18 @@ public partial class MainWindow : Window
             if (offer == null)
             {
                 if (interactive)
-                    ShowNotice("You're on the latest version.");
+                    ShowNotice(Locale.Get("noticeLatestVersion"));
                 return;
             }
 
-            string message = "Version " + offer.Version + " is ready. The parser will close, install it, and open again.";
+            string message = Locale.Format("updateMessage", offer.Version);
             bool accepted = IsVisible
-                ? ConfirmWindow.Ask(this, "Update available", message, "Update")
-                : ConfirmWindow.Ask(null, "Update available", message, "Update");
+                ? ConfirmWindow.Ask(this, Locale.Get("updateTitle"), message, Locale.Get("buttonUpdate"))
+                : ConfirmWindow.Ask(null, Locale.Get("updateTitle"), message, Locale.Get("buttonUpdate"));
             if (!accepted || _closing)
                 return;
 
-            ShowNotice("Downloading the update...");
+            ShowNotice(Locale.Get("noticeDownloading"));
             _noticeTimer.Stop();
             try
             {
@@ -981,7 +1047,7 @@ public partial class MainWindow : Window
             {
                 AppLog.Error("Update download failed.", exception);
                 if (!_closing)
-                    ShowNotice(exception is InvalidOperationException ? exception.Message : "The update could not be downloaded.");
+                    ShowNotice(exception is InvalidOperationException ? exception.Message : Locale.Get("noticeDownloadFailed"));
                 return;
             }
 

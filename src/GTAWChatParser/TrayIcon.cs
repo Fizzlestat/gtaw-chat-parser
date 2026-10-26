@@ -103,8 +103,8 @@ internal sealed class TrayIcon : IDisposable
                 Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint,
                 PlacementTarget = _window
             };
-            MenuItem open = new MenuItem { Header = "Open" };
-            MenuItem exit = new MenuItem { Header = "Exit" };
+            MenuItem open = new MenuItem { Header = Locale.Get("trayOpen") };
+            MenuItem exit = new MenuItem { Header = Locale.Get("trayExit") };
             open.Click += (_, _) => OpenRequested?.Invoke();
             exit.Click += (_, _) => ExitRequested?.Invoke();
             menu.Items.Add(open);

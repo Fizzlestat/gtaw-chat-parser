@@ -110,7 +110,7 @@ internal sealed class KeywordToastWindow : Window
 
         int holdMs = Math.Clamp(seconds, 1, 60) * 1000;
         foreach ((string _, string line) in hits.Take(3))
-            ShowToast("Keyword Notification", line, motion, holdMs);
+            ShowToast(Locale.Get("toastKeyword"), line, motion, holdMs);
 
         if (playSound)
             NotificationPing.Play(soundPath, fallbackToDefault: true);
@@ -119,7 +119,7 @@ internal sealed class KeywordToastWindow : Window
     public static void ShowSavedLog(string path, int seconds, NotificationMotion motion, bool playSound, string? soundPath)
     {
         string name = Path.GetFileName(path);
-        ShowToast("Log saved", string.IsNullOrWhiteSpace(name) ? "Chat log saved." : name, motion, Math.Clamp(seconds, 1, 60) * 1000);
+        ShowToast(Locale.Get("toastLogSaved"), string.IsNullOrWhiteSpace(name) ? Locale.Get("toastLogSavedBody") : name, motion, Math.Clamp(seconds, 1, 60) * 1000);
         if (playSound)
             NotificationPing.Play(soundPath, fallbackToDefault: true);
     }

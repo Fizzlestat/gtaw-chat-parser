@@ -45,6 +45,8 @@ public sealed class AppConfig
 
     public bool CheckUpdatesOnStartup { get; set; } = true;
 
+    public string Language { get; set; } = "en";
+
     [JsonIgnore]
     public string FilePath { get; internal set; } = AppPaths.ConfigPath;
 
@@ -150,6 +152,7 @@ public sealed class AppConfig
         StartWithWindows = other.StartWithWindows;
         StartMinimizedToTray = other.StartMinimizedToTray;
         CheckUpdatesOnStartup = other.CheckUpdatesOnStartup;
+        Language = Locale.Normalize(other.Language);
         _preserved.Clear();
         foreach (KeyValuePair<string, JsonNode?> extra in other._preserved)
         {
@@ -171,6 +174,7 @@ public sealed class AppConfig
         SecondaryColor = HudPalette.NormalizeHex(SecondaryColor, "#0C0E12");
         UiFont = string.IsNullOrWhiteSpace(UiFont) ? "Segoe UI" : UiFont.Trim();
         TranscriptFont = string.IsNullOrWhiteSpace(TranscriptFont) ? "Consolas" : TranscriptFont.Trim();
+        Language = Locale.Normalize(Language);
     }
 
     private bool TryApply(string name, JsonElement value)
@@ -266,6 +270,11 @@ public sealed class AppConfig
                     if (!TryReadBool(value, out bool checkUpdates))
                         return false;
                     CheckUpdatesOnStartup = checkUpdates;
+                    return true;
+                case "language":
+                    if (value.ValueKind != JsonValueKind.String)
+                        return false;
+                    Language = value.GetString() ?? Language;
                     return true;
                 default:
                     return false;

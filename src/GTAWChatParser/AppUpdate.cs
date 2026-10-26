@@ -32,7 +32,7 @@ internal static class AppUpdate
     internal static async Task<UpdateOffer?> FindAsync(CancellationToken cancellationToken)
     {
         if (!TrySplitRepository(Repository, out string owner, out string name))
-            throw new InvalidOperationException("No GitHub repository is set for updates.");
+            throw new InvalidOperationException(Locale.Get("errorNoRepository"));
 
         string url = $"https://api.github.com/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(name)}/releases/latest";
         using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -40,9 +40,9 @@ internal static class AppUpdate
         request.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", "2022-11-28");
         using HttpResponseMessage response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
-            throw new InvalidOperationException("No published release was found.");
+            throw new InvalidOperationException(Locale.Get("errorNoRelease"));
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException("Couldn't check for updates.");
+            throw new InvalidOperationException(Locale.Get("errorUpdateCheck"));
 
         await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using JsonDocument document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
@@ -53,7 +53,7 @@ internal static class AppUpdate
 
         string? download = FindAssetUrl(root);
         if (download == null)
-            throw new InvalidOperationException("The latest release does not include GTAWChatParser.exe.");
+            throw new InvalidOperationException(Locale.Get("errorMissingAsset"));
 
         return new UpdateOffer(FormatVersion(remote), download);
     }
@@ -69,7 +69,7 @@ internal static class AppUpdate
         using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, offer.DownloadUrl);
         using HttpResponseMessage response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException("The update could not be downloaded.");
+            throw new InvalidOperationException(Locale.Get("errorDownload"));
 
         await using (Stream input = await response.Content.ReadAsStreamAsync(cancellationToken))
         await using (FileStream output = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -78,7 +78,7 @@ internal static class AppUpdate
         if (!IsExecutable(partial))
         {
             File.Delete(partial);
-            throw new InvalidOperationException("The download was not the parser.");
+            throw new InvalidOperationException(Locale.Get("errorNotParser"));
         }
 
         File.Move(partial, destination, overwrite: true);
@@ -88,7 +88,7 @@ internal static class AppUpdate
     {
         string? exe = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(exe))
-            throw new InvalidOperationException("The parser path could not be found.");
+            throw new InvalidOperationException(Locale.Get("errorNoPath"));
 
         Directory.CreateDirectory(AppPaths.Directory);
         string pending = Path.Combine(AppPaths.Directory, "installed.version.pending");

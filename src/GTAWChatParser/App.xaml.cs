@@ -22,7 +22,17 @@ public partial class App : Application
 
         if (!acquired)
         {
-            MessageBox.Show("GTA: World Chat Parser is already open.", "GTA: World Chat Parser", MessageBoxButton.OK, MessageBoxImage.Information);
+            try
+            {
+                Locale.Apply(AppConfig.Load().Language);
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error("Settings file could not be read. It was left unchanged.", exception);
+                Locale.Apply("en");
+            }
+
+            MessageBox.Show(Locale.Get("alreadyOpen"), "GTA: World Chat Parser", MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
             return;
         }

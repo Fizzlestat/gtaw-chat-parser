@@ -45,16 +45,16 @@
                     </StackPanel>
                 </Border>
                 <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center">
-                    <Button Style="{StaticResource ChromeButton}" ToolTip="Minimize" AutomationProperties.Name="Minimize" Click="Minimize_Click">
+                    <Button Style="{StaticResource ChromeButton}" ToolTip="{local:Loc tooltipMinimize}" AutomationProperties.Name="{local:Loc tooltipMinimize}" Click="Minimize_Click">
                         <Path Data="M 4,8 H 14" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="18" Height="16"/>
                     </Button>
-                    <Button Style="{StaticResource ChromeButton}" ToolTip="Minimize to tray" AutomationProperties.Name="Minimize to tray" Click="Tray_Click" Margin="6,0,0,0">
+                    <Button Style="{StaticResource ChromeButton}" ToolTip="{local:Loc tooltipTray}" AutomationProperties.Name="{local:Loc tooltipTray}" Click="Tray_Click" Margin="6,0,0,0">
                         <Canvas Width="16" Height="16">
                             <Path Data="M 2,9 V 13 H 14 V 9" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                             <Path Data="M 8,2 V 8 M 5.2,5.6 L 8,8.2 L 10.8,5.6" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                         </Canvas>
                     </Button>
-                    <Button Style="{StaticResource CloseChromeButton}" ToolTip="Close" AutomationProperties.Name="Close" Click="Close_Click" Margin="6,0,0,0">
+                    <Button Style="{StaticResource CloseChromeButton}" ToolTip="{local:Loc tooltipClose}" AutomationProperties.Name="{local:Loc tooltipClose}" Click="Close_Click" Margin="6,0,0,0">
                         <Path Data="M 4,4 L 12,12 M 12,4 L 4,12" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Width="16" Height="16"/>
                     </Button>
                 </StackPanel>
@@ -76,16 +76,16 @@
                             <RowDefinition Height="28"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Text="LIVE TRANSCRIPT" Foreground="{DynamicResource FrameBrush}" FontSize="12" FontWeight="Bold" Margin="16,0,0,0" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="EmptyState" Grid.Row="1" Text="Waiting for FiveM.&#x0a;Chat already on screen is picked up as soon as the HUD attaches." Foreground="{DynamicResource MutedBrush}" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Text="{local:Loc transcriptHeading}" Foreground="{DynamicResource FrameBrush}" FontSize="12" FontWeight="Bold" Margin="16,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="EmptyState" Grid.Row="1" Text="{local:Loc transcriptEmpty}" TextWrapping="Wrap" MaxWidth="460" Foreground="{DynamicResource MutedBrush}" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24"/>
                         <FlowDocumentScrollViewer x:Name="ChatView" Grid.Row="1" Background="Transparent" BorderThickness="0"
                                  IsToolBarVisible="False" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                  FontFamily="{DynamicResource TranscriptFont}" FontSize="14" Foreground="{DynamicResource LineBrush}"
                                  Visibility="Collapsed" SizeChanged="ChatView_SizeChanged" Focusable="True">
                             <FlowDocumentScrollViewer.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
-                                    <MenuItem Header="Select all" Command="ApplicationCommands.SelectAll"/>
+                                    <MenuItem Header="{local:Loc transcriptCopy}" Command="ApplicationCommands.Copy"/>
+                                    <MenuItem Header="{local:Loc transcriptSelectAll}" Command="ApplicationCommands.SelectAll"/>
                                 </ContextMenu>
                             </FlowDocumentScrollViewer.ContextMenu>
                             <FlowDocument x:Name="ChatDocument" Background="Transparent" PagePadding="12,4,8,12"
@@ -96,9 +96,9 @@
 
                 <Border Grid.Column="1" Width="400" Background="{DynamicResource SideBrush}" BorderBrush="{DynamicResource FrameLineBrush}" BorderThickness="1,0,0,0">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="SETTINGS" Foreground="{DynamicResource FrameBrush}" FontSize="12" FontWeight="Bold" Margin="16,16,16,8"/>
+                        <TextBlock DockPanel.Dock="Top" Text="{local:Loc settingsHeading}" Foreground="{DynamicResource FrameBrush}" FontSize="12" FontWeight="Bold" Margin="16,16,16,8"/>
                         <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource FrameFaintBrush}" BorderThickness="0,1,0,0" Margin="16,0,16,14" Padding="0,14,0,0">
-                            <Button Content="Exit" Style="{StaticResource HudButton}" Click="Exit_Click"/>
+                            <Button Content="{local:Loc buttonExit}" Style="{StaticResource HudButton}" Click="Exit_Click"/>
                         </Border>
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="16,0,16,8">
                             <StackPanel>
@@ -108,15 +108,15 @@
                                         <TextBlock x:Name="KeywordsChevron" Text="›" FontSize="16" Foreground="{DynamicResource FrameBrush}" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                             <TextBlock.RenderTransform><RotateTransform x:Name="KeywordsAngle" Angle="90"/></TextBlock.RenderTransform>
                                         </TextBlock>
-                                        <TextBlock Text="Keywords" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{local:Loc sectionKeywords}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold"/>
                                     </DockPanel>
                                 </Border>
                                 <Border x:Name="KeywordsBody" Background="{DynamicResource CardBrush}" CornerRadius="0,0,8,8" Padding="14,4,14,12" ClipToBounds="True">
                                     <Border.LayoutTransform><ScaleTransform x:Name="KeywordsScale" ScaleY="1"/></Border.LayoutTransform>
                                     <StackPanel>
-                                        <TextBlock Text="One keyword or phrase per line." Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,8"/>
+                                        <TextBlock Text="{local:Loc keywordsHint}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,8"/>
                                         <TextBox x:Name="KeywordsBox" Style="{StaticResource HudField}" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MinHeight="120" MaxHeight="180"/>
-                                        <Button Content="Save keywords" Style="{StaticResource HudPrimaryButton}" Margin="0,10,0,0" Click="SaveKeywords_Click"/>
+                                        <Button Content="{local:Loc buttonSaveKeywords}" Style="{StaticResource HudPrimaryButton}" Margin="0,10,0,0" Click="SaveKeywords_Click"/>
                                     </StackPanel>
                                 </Border>
 
@@ -126,19 +126,19 @@
                                         <TextBlock x:Name="LogsChevron" Text="›" FontSize="16" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                             <TextBlock.RenderTransform><RotateTransform x:Name="LogsAngle" Angle="0"/></TextBlock.RenderTransform>
                                         </TextBlock>
-                                        <TextBlock Text="Logs" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource LineBrush}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{local:Loc sectionLogs}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource LineBrush}" FontWeight="SemiBold"/>
                                     </DockPanel>
                                 </Border>
                                 <Border x:Name="LogsBody" Background="{DynamicResource CardBrush}" CornerRadius="0,0,8,8" Padding="14,8,14,12" Opacity="0" Visibility="Collapsed" ClipToBounds="True">
                                     <Border.LayoutTransform><ScaleTransform x:Name="LogsScale" ScaleY="0"/></Border.LayoutTransform>
                                     <StackPanel>
                                         <TextBlock x:Name="FolderText" Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                                        <TextBlock Text="Saved as Year\MON\dd.MON.yyyy-HH.mm.ss.txt" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,10"/>
+                                        <TextBlock Text="{local:Loc logsFormat}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,10"/>
                                         <UniformGrid Columns="2" Margin="0,0,0,8">
-                                            <Button Content="Change folder" Style="{StaticResource HudButton}" Margin="0,0,4,0" Click="ChangeFolder_Click"/>
-                                            <Button Content="Open folder" Style="{StaticResource HudButton}" Margin="4,0,0,0" Click="OpenFolder_Click"/>
+                                            <Button Content="{local:Loc buttonChangeFolder}" Style="{StaticResource HudButton}" Margin="0,0,4,0" Click="ChangeFolder_Click"/>
+                                            <Button Content="{local:Loc buttonOpenFolder}" Style="{StaticResource HudButton}" Margin="4,0,0,0" Click="OpenFolder_Click"/>
                                         </UniformGrid>
-                                        <Button Content="Save log now" Style="{StaticResource HudPrimaryButton}" Click="SaveLog_Click"/>
+                                        <Button Content="{local:Loc buttonSaveLog}" Style="{StaticResource HudPrimaryButton}" Click="SaveLog_Click"/>
                                     </StackPanel>
                                 </Border>
 
@@ -148,7 +148,7 @@
                                         <TextBlock x:Name="NotificationsChevron" Text="›" FontSize="16" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                             <TextBlock.RenderTransform><RotateTransform x:Name="NotificationsAngle" Angle="0"/></TextBlock.RenderTransform>
                                         </TextBlock>
-                                        <TextBlock Text="Notifications" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource LineBrush}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{local:Loc sectionNotifications}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource LineBrush}" FontWeight="SemiBold"/>
                                     </DockPanel>
                                 </Border>
                                 <Border x:Name="NotificationsBody" Background="{DynamicResource CardBrush}" CornerRadius="0,0,8,8" Padding="14,10,14,12" Opacity="0" Visibility="Collapsed" ClipToBounds="True">
@@ -156,25 +156,25 @@
                                     <StackPanel>
                                         <DockPanel Margin="0,0,0,8">
                                             <CheckBox x:Name="NotificationsToggle" Style="{StaticResource HudToggle}" DockPanel.Dock="Right" Checked="Notifications_Changed" Unchecked="Notifications_Changed"/>
-                                            <TextBlock Text="Notifications" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                                            <TextBlock Text="{local:Loc labelNotifications}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
                                         </DockPanel>
                                         <DockPanel Margin="0,0,0,8">
                                             <CheckBox x:Name="SoundToggle" Style="{StaticResource HudToggle}" DockPanel.Dock="Right" Checked="Notifications_Changed" Unchecked="Notifications_Changed"/>
-                                            <TextBlock Text="Sound" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                                            <TextBlock Text="{local:Loc labelSound}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
                                         </DockPanel>
-                                        <TextBlock Text="Sound file, 2 seconds or less" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,6"/>
+                                        <TextBlock Text="{local:Loc soundHint}" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,6"/>
                                         <TextBlock x:Name="SoundFileText" Text="Default" Foreground="{DynamicResource TextBrush}" TextTrimming="CharacterEllipsis" Margin="0,0,0,8"/>
                                         <UniformGrid Columns="3" Margin="0,0,0,8">
-                                            <Button Content="Choose" Style="{StaticResource HudButton}" Margin="0,0,4,0" Click="ChooseSound_Click"/>
-                                            <Button Content="Play" Style="{StaticResource HudButton}" Margin="4,0" Click="PreviewSound_Click"/>
-                                            <Button Content="Default" Style="{StaticResource HudButton}" Margin="4,0,0,0" Click="ResetSound_Click"/>
+                                            <Button Content="{local:Loc buttonChoose}" Style="{StaticResource HudButton}" Margin="0,0,4,0" Click="ChooseSound_Click"/>
+                                            <Button Content="{local:Loc buttonPlay}" Style="{StaticResource HudButton}" Margin="4,0" Click="PreviewSound_Click"/>
+                                            <Button Content="{local:Loc buttonDefault}" Style="{StaticResource HudButton}" Margin="4,0,0,0" Click="ResetSound_Click"/>
                                         </UniformGrid>
                                         <DockPanel Margin="0,0,0,8">
                                             <CheckBox x:Name="CaseToggle" Style="{StaticResource HudToggle}" DockPanel.Dock="Right" Checked="Notifications_Changed" Unchecked="Notifications_Changed"/>
-                                            <TextBlock Text="Case sensitive" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                                            <TextBlock Text="{local:Loc labelCaseSensitive}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
                                         </DockPanel>
                                         <DockPanel Margin="0,0,0,10">
-                                            <TextBlock Text="seconds" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" Margin="8,0,0,0"/>
+                                            <TextBlock Text="{local:Loc labelSeconds}" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" Margin="8,0,0,0"/>
                                             <Border DockPanel.Dock="Right" Width="64" Height="36" CornerRadius="7" Background="{DynamicResource TranscriptBrush}" BorderThickness="1.5">
                                                 <Border.Style>
                                                     <Style TargetType="Border">
@@ -191,13 +191,13 @@
                                                 </Border.Style>
                                                 <TextBox x:Name="SecondsBox" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextBrush}" CaretBrush="{DynamicResource TextBrush}" TextAlignment="Center" VerticalContentAlignment="Center" Padding="0" FontSize="13" LostFocus="Seconds_Commit" PreviewKeyDown="Seconds_KeyDown"/>
                                             </Border>
-                                            <TextBlock Text="Duration" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                                            <TextBlock Text="{local:Loc labelDuration}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
                                         </DockPanel>
-                                        <TextBlock Text="Animation" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,6"/>
+                                        <TextBlock Text="{local:Loc labelAnimation}" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,6"/>
                                         <UniformGrid Columns="3">
-                                            <Button x:Name="SlideButton" Content="Slide in" Style="{StaticResource HudChoiceSelectedButton}" Margin="0,0,4,0" Click="Animation_Click"/>
-                                            <Button x:Name="PopButton" Content="Pop in" Style="{StaticResource HudChoiceButton}" Margin="4,0" Click="Animation_Click"/>
-                                            <Button x:Name="NoneButton" Content="None" Style="{StaticResource HudChoiceButton}" Margin="4,0,0,0" Click="Animation_Click"/>
+                                            <Button x:Name="SlideButton" Content="{local:Loc animationSlide}" Style="{StaticResource HudChoiceSelectedButton}" Margin="0,0,4,0" Click="Animation_Click"/>
+                                            <Button x:Name="PopButton" Content="{local:Loc animationPop}" Style="{StaticResource HudChoiceButton}" Margin="4,0" Click="Animation_Click"/>
+                                            <Button x:Name="NoneButton" Content="{local:Loc animationNone}" Style="{StaticResource HudChoiceButton}" Margin="4,0,0,0" Click="Animation_Click"/>
                                         </UniformGrid>
                                     </StackPanel>
                                 </Border>
@@ -208,21 +208,21 @@
                                         <TextBlock x:Name="AppearanceChevron" Text="›" FontSize="16" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                             <TextBlock.RenderTransform><RotateTransform x:Name="AppearanceAngle" Angle="0"/></TextBlock.RenderTransform>
                                         </TextBlock>
-                                        <TextBlock Text="Customization" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource LineBrush}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{local:Loc sectionCustomization}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource LineBrush}" FontWeight="SemiBold"/>
                                     </DockPanel>
                                 </Border>
                                 <Border x:Name="AppearanceBody" Background="{DynamicResource CardBrush}" CornerRadius="0,0,8,8" Padding="14,10,14,12" Opacity="0" Visibility="Collapsed" ClipToBounds="True">
                                     <Border.LayoutTransform><ScaleTransform x:Name="AppearanceScale" ScaleY="0"/></Border.LayoutTransform>
                                     <StackPanel>
-                                        <TextBlock Text="Primary" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                        <TextBlock Text="{local:Loc labelPrimary}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
                                         <local:HudColorWell x:Name="PrimaryWell" Margin="0,0,0,12" ColorEdited="ColorWell_Edited" ColorCommitted="ColorWell_Committed"/>
-                                        <TextBlock Text="Secondary" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                        <TextBlock Text="{local:Loc labelSecondary}" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
                                         <local:HudColorWell x:Name="SecondaryWell" Margin="0,0,0,12" ColorEdited="ColorWell_Edited" ColorCommitted="ColorWell_Committed"/>
-                                        <TextBlock Text="Interface font" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,6"/>
+                                        <TextBlock Text="{local:Loc labelInterfaceFont}" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,6"/>
                                         <ComboBox x:Name="UiFontBox" Style="{StaticResource HudCombo}" Margin="0,0,0,10" SelectionChanged="Font_Changed"/>
-                                        <TextBlock Text="Transcript font" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,6"/>
+                                        <TextBlock Text="{local:Loc labelTranscriptFont}" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,6"/>
                                         <ComboBox x:Name="TranscriptFontBox" Style="{StaticResource HudCombo}" Margin="0,0,0,12" SelectionChanged="Font_Changed"/>
-                                        <Button Content="Reset appearance" Style="{StaticResource HudButton}" Click="ResetAppearance_Click"/>
+                                        <Button Content="{local:Loc buttonResetAppearance}" Style="{StaticResource HudButton}" Click="ResetAppearance_Click"/>
                                     </StackPanel>
                                 </Border>
 
@@ -232,25 +232,27 @@
                                         <TextBlock x:Name="StartupChevron" Text="›" FontSize="16" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                                             <TextBlock.RenderTransform><RotateTransform x:Name="StartupAngle" Angle="0"/></TextBlock.RenderTransform>
                                         </TextBlock>
-                                        <TextBlock Text="Application" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource LineBrush}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{local:Loc sectionApplication}" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource LineBrush}" FontWeight="SemiBold"/>
                                     </DockPanel>
                                 </Border>
                                 <Border x:Name="StartupBody" Background="{DynamicResource CardBrush}" CornerRadius="0,0,8,8" Padding="14,10,14,12" Opacity="0" Visibility="Collapsed" ClipToBounds="True">
                                     <Border.LayoutTransform><ScaleTransform x:Name="StartupScale" ScaleY="0"/></Border.LayoutTransform>
                                     <StackPanel>
+                                        <TextBlock Text="{local:Loc labelLanguage}" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,0,0,6"/>
+                                        <ComboBox x:Name="LanguageBox" Style="{StaticResource HudCombo}" Margin="0,0,0,12" SelectionChanged="Language_Changed"/>
                                         <DockPanel>
                                             <CheckBox x:Name="StartupToggle" Style="{StaticResource HudToggle}" DockPanel.Dock="Right" Checked="Startup_Changed" Unchecked="Startup_Changed"/>
-                                            <TextBlock Text="Start with Windows" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                                            <TextBlock Text="{local:Loc labelStartWithWindows}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
                                         </DockPanel>
                                         <DockPanel Margin="0,12,0,0">
                                             <CheckBox x:Name="TrayStartupToggle" Style="{StaticResource HudToggle}" DockPanel.Dock="Right" IsEnabled="False" Checked="TrayStartup_Changed" Unchecked="TrayStartup_Changed"/>
-                                            <TextBlock x:Name="TrayStartupLabel" Text="Start minimized to tray" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" Opacity="0.45"/>
+                                            <TextBlock x:Name="TrayStartupLabel" Text="{local:Loc labelStartMinimized}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" Opacity="0.45"/>
                                         </DockPanel>
                                         <DockPanel Margin="0,12,0,0">
                                             <CheckBox x:Name="UpdateToggle" Style="{StaticResource HudToggle}" DockPanel.Dock="Right" Checked="UpdateCheck_Changed" Unchecked="UpdateCheck_Changed"/>
-                                            <TextBlock Text="Check for updates on startup" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                                            <TextBlock Text="{local:Loc labelCheckUpdates}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
                                         </DockPanel>
-                                        <Button Content="Check for updates" Style="{StaticResource HudButton}" Margin="0,14,0,0" HorizontalAlignment="Left" Click="CheckUpdates_Click"/>
+                                        <Button Content="{local:Loc buttonCheckUpdates}" Style="{StaticResource HudButton}" Margin="0,14,0,0" HorizontalAlignment="Left" Click="CheckUpdates_Click"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
