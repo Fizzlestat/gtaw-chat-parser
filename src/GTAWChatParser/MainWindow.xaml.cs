@@ -97,6 +97,16 @@ public partial class MainWindow : Window
         {
         }
 
+        try
+        {
+            // Rounded window corners on Windows 11; ignored on Windows 10.
+            int round = 2;
+            DwmSetWindowAttribute(hwnd, 33, ref round, sizeof(int));
+        }
+        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException)
+        {
+        }
+
         _tray.Attach(hwnd);
     }
 
@@ -549,46 +559,34 @@ public partial class MainWindow : Window
 
     private void RefreshHeaders()
     {
-        StyleHeader(KeywordsHeader, KeywordsChevron, KeywordsBody.Visibility == Visibility.Visible);
-        StyleHeader(LogsHeader, LogsChevron, LogsBody.Visibility == Visibility.Visible);
-        StyleHeader(NotificationsHeader, NotificationsChevron, NotificationsBody.Visibility == Visibility.Visible);
-        StyleHeader(AppearanceHeader, AppearanceChevron, AppearanceBody.Visibility == Visibility.Visible);
-        StyleHeader(StartupHeader, StartupChevron, StartupBody.Visibility == Visibility.Visible);
+        StyleHeader(KeywordsHeader, KeywordsIndex, KeywordsChevron, IsOpen(KeywordsBody));
+        StyleHeader(LogsHeader, LogsIndex, LogsChevron, IsOpen(LogsBody));
+        StyleHeader(NotificationsHeader, NotificationsIndex, NotificationsChevron, IsOpen(NotificationsBody));
+        StyleHeader(AppearanceHeader, AppearanceIndex, AppearanceChevron, IsOpen(AppearanceBody));
+        StyleHeader(StartupHeader, StartupIndex, StartupChevron, IsOpen(StartupBody));
     }
+
+    // Tag holds the target state while a section animates; fall back to visibility before the first toggle.
+    private static bool IsOpen(FrameworkElement body) => body.Tag is bool open ? open : body.Visibility == Visibility.Visible;
 
     private void Header_MouseEnter(object sender, MouseEventArgs e)
     {
         if (sender is Border header)
-            AnimateHeader(header, ThemeColor("CardHoverBrush"));
+            AnimateHeader(header, ThemeColor("HoverBrush"));
     }
 
     private void Header_MouseLeave(object sender, MouseEventArgs e)
     {
-        if (sender is not Border header)
-            return;
-
-        AnimateHeader(header, HeaderIsOpen(header) ? ThemeColor("CardBrush") : TransparentSide());
+        if (sender is Border header)
+            AnimateHeader(header, TransparentSide());
     }
 
-    private void StyleHeader(Border header, TextBlock chevron, bool open)
+    private static void StyleHeader(Border header, TextBlock index, System.Windows.Shapes.Path glyph, bool open)
     {
-        header.CornerRadius = open ? new CornerRadius(8, 8, 0, 0) : new CornerRadius(8);
-        chevron.Foreground = FindBrush(open ? "FrameBrush" : "MutedBrush");
+        index.Foreground = FindBrush(open ? "FrameBrush" : "MutedBrush");
+        glyph.Stroke = FindBrush(open ? "TextBrush" : "MutedBrush");
         if (!header.IsMouseOver)
-            AnimateHeader(header, open ? ThemeColor("CardBrush") : TransparentSide());
-    }
-
-    private bool HeaderIsOpen(Border header)
-    {
-        if (header == KeywordsHeader)
-            return KeywordsBody.Visibility == Visibility.Visible;
-        if (header == LogsHeader)
-            return LogsBody.Visibility == Visibility.Visible;
-        if (header == NotificationsHeader)
-            return NotificationsBody.Visibility == Visibility.Visible;
-        if (header == AppearanceHeader)
-            return AppearanceBody.Visibility == Visibility.Visible;
-        return StartupBody.Visibility == Visibility.Visible;
+            AnimateHeader(header, TransparentSide());
     }
 
     private static Color ThemeColor(string key)
@@ -626,7 +624,7 @@ public partial class MainWindow : Window
 
         CubicEase ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(open ? 1 : 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
-        angle.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(open ? 90 : 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease });
+        angle.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(open ? 45 : 0, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
         body.BeginAnimation(OpacityProperty, new DoubleAnimation(open ? 1 : 0, TimeSpan.FromMilliseconds(160)) { EasingFunction = ease });
         if (open)
             return;
@@ -679,6 +677,34 @@ public partial class MainWindow : Window
         _status = status;
         StatusText.Text = Locale.Describe(status);
         StatusDot.Fill = StatusBrush(status.Kind);
+        SetPulse(status.Kind == CaptureStatusKind.Capturing);
+    }
+
+    private bool _pulsing;
+
+    // A slow radar ping around the status dot while chat is being recorded.
+    private void SetPulse(bool on)
+    {
+        if (on == _pulsing)
+            return;
+
+        _pulsing = on;
+        if (!on)
+        {
+            StatusHalo.BeginAnimation(OpacityProperty, null);
+            StatusHaloScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            StatusHaloScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            StatusHalo.Opacity = 0;
+            return;
+        }
+
+        Duration period = new Duration(TimeSpan.FromMilliseconds(1800));
+        QuadraticEase ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+        DoubleAnimation grow = new DoubleAnimation(1, 3.2, period) { EasingFunction = ease, RepeatBehavior = RepeatBehavior.Forever };
+        DoubleAnimation fade = new DoubleAnimation(0.55, 0, period) { EasingFunction = ease, RepeatBehavior = RepeatBehavior.Forever };
+        StatusHaloScale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+        StatusHaloScale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+        StatusHalo.BeginAnimation(OpacityProperty, fade);
     }
 
     private static Brush StatusBrush(CaptureStatusKind kind)
@@ -752,13 +778,16 @@ public partial class MainWindow : Window
         public override string ToString() => Label;
     }
 
+    private int _noticeVersion;
+
     private void ShowNotice(string message)
     {
+        _noticeVersion++;
         NoticeText.Text = message;
-        NoticeBar.BeginAnimation(HeightProperty, null);
-        NoticeBar.Height = 0;
         NoticeBar.Visibility = Visibility.Visible;
-        NoticeBar.BeginAnimation(HeightProperty, new DoubleAnimation(32, TimeSpan.FromMilliseconds(160)));
+        CubicEase ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        NoticeBar.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(200)) { EasingFunction = ease });
+        NoticeSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
         _noticeTimer.Stop();
         _noticeTimer.Start();
     }
@@ -766,13 +795,19 @@ public partial class MainWindow : Window
     private void HideNotice()
     {
         _noticeTimer.Stop();
-        DoubleAnimation animation = new DoubleAnimation(0, TimeSpan.FromMilliseconds(140));
-        animation.Completed += (_, _) =>
+        int version = _noticeVersion;
+        CubicEase ease = new CubicEase { EasingMode = EasingMode.EaseIn };
+        DoubleAnimation fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(160)) { EasingFunction = ease };
+        fade.Completed += (_, _) =>
         {
+            if (version != _noticeVersion)
+                return;
+
             NoticeBar.Visibility = Visibility.Collapsed;
             NoticeText.Text = string.Empty;
         };
-        NoticeBar.BeginAnimation(HeightProperty, animation);
+        NoticeBar.BeginAnimation(OpacityProperty, fade);
+        NoticeSlide.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(10, TimeSpan.FromMilliseconds(160)) { EasingFunction = ease });
     }
 
     private void RenderChat(string snapshot, bool force = false)
@@ -801,7 +836,7 @@ public partial class MainWindow : Window
         {
             if (i == _paragraphs.Count)
             {
-                Paragraph paragraph = new Paragraph { Margin = new Thickness(0, 1, 0, 1) };
+                Paragraph paragraph = new Paragraph { Margin = new Thickness(0, 2, 0, 2) };
                 FillParagraph(paragraph, visible[i]);
                 ChatDocument.Blocks.Add(paragraph);
                 _paragraphs.Add(paragraph);
@@ -1132,6 +1167,9 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll")]
     private static extern bool FlashWindow(IntPtr hwnd, bool invert);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 }
 
 internal sealed class TranscriptRun

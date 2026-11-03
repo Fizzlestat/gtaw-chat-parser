@@ -12,7 +12,7 @@ internal sealed class KeywordToastWindow : Window
 
     private static readonly List<KeywordToastWindow> OpenToasts = [];
 
-    private readonly DispatcherTimer _clock;
+    private bool _ticking;
     private readonly TranslateTransform _slide = new();
     private readonly ScaleTransform _scale = new(1, 1);
     private readonly Border _progress;
@@ -35,50 +35,77 @@ internal sealed class KeywordToastWindow : Window
         Background = Brushes.Transparent;
         Cursor = Cursors.Hand;
 
-        TextBlock heading = new TextBlock
+        FontFamily uiFont = (FontFamily)Application.Current.FindResource("UiFont");
+        TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
+
+        StackPanel headingRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+        headingRow.Children.Add(new System.Windows.Shapes.Ellipse
+        {
+            Width = 6,
+            Height = 6,
+            Fill = FindBrush("FrameBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 1, 8, 0)
+        });
+        headingRow.Children.Add(new TextBlock
         {
             Text = title,
+            FontFamily = uiFont,
             FontWeight = FontWeights.SemiBold,
-            Foreground = FindBrush("FrameBrush"),
-            FontSize = 13
-        };
+            Foreground = FindBrush("MutedBrush"),
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+
         TextBlock body = new TextBlock
         {
             Text = line,
-            Foreground = FindBrush("LineBrush"),
+            FontFamily = (FontFamily)Application.Current.FindResource("TranscriptFont"),
+            Foreground = FindBrush("TextBrush"),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 13,
+            LineHeight = 19,
             MaxHeight = 96,
             TextTrimming = TextTrimming.CharacterEllipsis
         };
-        body.Measure(new Size(MaxToastWidth - 48, double.PositiveInfinity));
-        double width = Math.Clamp(Math.Max(180, body.DesiredSize.Width + 48), 220, MaxToastWidth);
-        double height = 18 + heading.FontSize + 8 + Math.Min(96, body.DesiredSize.Height) + 22;
-        Width = width;
-        Height = height;
-        _slotHeight = height;
+        body.Measure(new Size(MaxToastWidth - 40, double.PositiveInfinity));
+        double width = Math.Clamp(body.DesiredSize.Width + 40, 260, MaxToastWidth);
 
+        // Time-left line: a faint track with the accent draining out of it.
         _progress = new Border
         {
-            Height = 3,
-            Margin = new Thickness(0, 10, 0, 0),
-            CornerRadius = new CornerRadius(2),
+            Height = 2,
+            CornerRadius = new CornerRadius(1),
             Background = FindBrush("FrameBrush"),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
             RenderTransformOrigin = new Point(0, 0.5),
             RenderTransform = new ScaleTransform(1, 1)
         };
+        Border track = new Border
+        {
+            Height = 2,
+            Margin = new Thickness(0, 12, 0, 0),
+            CornerRadius = new CornerRadius(1),
+            Background = FindBrush("HairlineBrush"),
+            Child = _progress
+        };
 
-        StackPanel stack = new StackPanel { Margin = new Thickness(16, 10, 16, 12) };
-        stack.Children.Add(heading);
+        StackPanel stack = new StackPanel { Margin = new Thickness(18, 12, 18, 14) };
+        stack.Children.Add(headingRow);
         stack.Children.Add(body);
-        stack.Children.Add(_progress);
+        stack.Children.Add(track);
         Border card = new Border
         {
-            Background = FindBrush("CardBrush"),
+            Background = FindBrush("SideBrush"),
+            BorderBrush = FindBrush("HairlineStrongBrush"),
+            BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
             Child = stack
         };
+        card.Measure(new Size(width, double.PositiveInfinity));
+        double height = Math.Ceiling(card.DesiredSize.Height);
+        Width = width;
+        Height = height;
+        _slotHeight = height;
         Content = card;
 
         TransformGroup group = new TransformGroup();
@@ -99,8 +126,46 @@ internal sealed class KeywordToastWindow : Window
         }
 
         MouseDown += (_, _) => BeginLeave();
-        _clock = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        _clock.Tick += (_, _) => Step();
+    }
+
+    // Driven per rendered frame rather than by a DispatcherTimer: Windows throttles timers
+    // for apps with no visible window (e.g. minimized to tray), which made the motion stutter.
+    private void StartClock()
+    {
+        if (_ticking)
+            return;
+
+        _ticking = true;
+        CompositionTarget.Rendering += OnFrame;
+    }
+
+    private void StopClock()
+    {
+        if (!_ticking)
+            return;
+
+        _ticking = false;
+        CompositionTarget.Rendering -= OnFrame;
+    }
+
+    private void OnFrame(object? sender, EventArgs e) => Step();
+
+    protected override void OnClosed(EventArgs e)
+    {
+        StopClock();
+        base.OnClosed(e);
+    }
+
+    private void StartProgress(int delayMs)
+    {
+        if (_progress.RenderTransform is not ScaleTransform bar)
+            return;
+
+        // Runs on WPF's animation clock so it stays smooth even when the UI thread is quiet.
+        bar.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(_holdMs))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(delayMs)
+        });
     }
 
     public static void ShowMatches(IReadOnlyList<(string Keywords, string Line)> hits, int seconds, NotificationMotion motion, bool playSound, string? soundPath)
@@ -164,7 +229,8 @@ internal sealed class KeywordToastWindow : Window
         if (_motion == NotificationMotion.None)
         {
             Opacity = 1;
-            _clock.Start();
+            StartProgress(0);
+            StartClock();
             return;
         }
 
@@ -181,7 +247,8 @@ internal sealed class KeywordToastWindow : Window
             _slide.X = Width;
         }
 
-        _clock.Start();
+        StartProgress(280);
+        StartClock();
     }
 
     private void BeginLeave()
@@ -213,9 +280,6 @@ internal sealed class KeywordToastWindow : Window
                 _slide.X = Width * (1 - eased);
             }
 
-            double remain = 1 - Math.Clamp((elapsed - (_motion == NotificationMotion.None ? 0 : 280)) / (double)_holdMs, 0, 1);
-            if (_progress.RenderTransform is ScaleTransform bar)
-                bar.ScaleX = Math.Max(0, remain);
             if (elapsed >= (_motion == NotificationMotion.None ? 0 : 280) + _holdMs)
                 BeginLeave();
             return;

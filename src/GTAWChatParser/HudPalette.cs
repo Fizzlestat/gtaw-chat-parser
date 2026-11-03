@@ -42,6 +42,10 @@ internal static class HudPalette
         Put(resources, "InkBrush", Luminance(primary) > 0.55 ? Shift(primary, -0.72) : text);
         Put(resources, "OkBrush", Color.FromRgb(0x7E, 0xC4, 0x8C));
         Put(resources, "IdleBrush", Mix(text, secondary, 0.5));
+        Put(resources, "HairlineBrush", Mix(text, secondary, dark ? 0.91 : 0.88));
+        Put(resources, "HairlineStrongBrush", Mix(text, secondary, dark ? 0.82 : 0.78));
+        Put(resources, "HoverBrush", WithAlpha(text, dark ? (byte)0x0C : (byte)0x10));
+        Put(resources, "DangerBrush", Color.FromRgb(0xE5, 0x48, 0x4D));
 
         resources["UiFont"] = FontWithFallbacks(NormalizeFont(config.UiFont, DefaultUiFont));
         resources["TranscriptFont"] = FontWithFallbacks(NormalizeFont(config.TranscriptFont, DefaultTranscriptFont));

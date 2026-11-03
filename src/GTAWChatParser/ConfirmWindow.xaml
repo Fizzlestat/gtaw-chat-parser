@@ -3,31 +3,41 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:GTAWChatParser"
         Title="{local:Loc confirmTitle}"
-        Width="460" Height="220"
+        Width="500" Height="252"
         WindowStyle="None"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         AllowsTransparency="True"
         Background="Transparent"
+        FontFamily="{DynamicResource UiFont}"
+        FontSize="13"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True"
         Opacity="0"
         Loaded="Window_Loaded">
-    <Border Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource FrameBrush}" BorderThickness="1" CornerRadius="10">
+    <Border Margin="20,12,20,28" Background="{DynamicResource SideBrush}" BorderBrush="{DynamicResource HairlineStrongBrush}" BorderThickness="1" CornerRadius="12">
         <Border.RenderTransform>
             <TranslateTransform x:Name="Slide" Y="12"/>
         </Border.RenderTransform>
-        <Grid Margin="24,20,24,18">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="28" ShadowDepth="8" Direction="270" Opacity="0.45" Color="Black"/>
+        </Border.Effect>
+        <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock x:Name="TitleText" Text="{local:Loc confirmTitle}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" MouseLeftButtonDown="Drag"/>
-            <TextBlock x:Name="MessageText" Grid.Row="1" Text="{local:Loc confirmCloseMessage}" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,12,0,0" VerticalAlignment="Top"/>
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="{local:Loc buttonCancel}" Style="{StaticResource HudButton}" MinWidth="112" Margin="0,0,10,0" IsCancel="True" Click="Cancel_Click"/>
-                <Button x:Name="ConfirmButton" Content="{local:Loc buttonClose}" Style="{StaticResource HudPrimaryButton}" MinWidth="124" IsDefault="True" Click="Close_Click"/>
+            <StackPanel Margin="24,22,24,0" Background="Transparent" MouseLeftButtonDown="Drag">
+                <TextBlock x:Name="TitleText" Text="{local:Loc confirmTitle}" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
+                <TextBlock x:Name="MessageText" Text="{local:Loc confirmCloseMessage}" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" LineHeight="20" Margin="0,8,0,0"/>
             </StackPanel>
+            <Border Grid.Row="1" BorderBrush="{DynamicResource HairlineBrush}" BorderThickness="0,1,0,0" Padding="20,14">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="{local:Loc buttonCancel}" Style="{StaticResource HudButton}" MinWidth="96" Margin="0,0,8,0" IsCancel="True" Click="Cancel_Click"/>
+                    <Button x:Name="ConfirmButton" Content="{local:Loc buttonClose}" Style="{StaticResource HudPrimaryButton}" MinWidth="104" IsDefault="True" Click="Close_Click"/>
+                </StackPanel>
+            </Border>
         </Grid>
     </Border>
 </Window>

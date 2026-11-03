@@ -28,13 +28,13 @@ internal sealed class HudColorWell : UserControl
 
         Border planeBorder = new Border
         {
-            Height = 136,
+            Height = 120,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Cursor = Cursors.Cross,
             ClipToBounds = true
         };
-        planeBorder.SetResourceReference(Border.BorderBrushProperty, "FrameSoftBrush");
+        planeBorder.SetResourceReference(Border.BorderBrushProperty, "HairlineStrongBrush");
         _planeHost = new Grid();
         _planeImage = new Image { Stretch = Stretch.Fill, SnapsToDevicePixels = true };
         _planeMark = CreateMark();
@@ -67,7 +67,7 @@ internal sealed class HudColorWell : UserControl
             Cursor = Cursors.Hand,
             ClipToBounds = true
         };
-        hueBorder.SetResourceReference(Border.BorderBrushProperty, "FrameSoftBrush");
+        hueBorder.SetResourceReference(Border.BorderBrushProperty, "HairlineStrongBrush");
         _hueHost = new Grid();
         _hueHost.Children.Add(new Image { Source = HueStrip, Stretch = Stretch.Fill, SnapsToDevicePixels = true });
         _hueMark = new Border
@@ -88,7 +88,7 @@ internal sealed class HudColorWell : UserControl
         hueBorder.Child = _hueHost;
         hueBorder.SizeChanged += (_, _) =>
         {
-            RoundClip(hueBorder, 8);
+            RoundClip(hueBorder, 6);
             PositionMarkers();
         };
         _hueHost.MouseLeftButtonDown += (_, args) => BeginDrag(_hueHost, args, FromHue);
@@ -105,20 +105,20 @@ internal sealed class HudColorWell : UserControl
         {
             Width = 36,
             Height = 36,
-            CornerRadius = new CornerRadius(7),
+            CornerRadius = new CornerRadius(6),
             BorderThickness = new Thickness(1),
             Margin = new Thickness(0, 0, 8, 0)
         };
-        _swatch.SetResourceReference(Border.BorderBrushProperty, "FrameSoftBrush");
+        _swatch.SetResourceReference(Border.BorderBrushProperty, "HairlineStrongBrush");
         DockPanel.SetDock(_swatch, Dock.Left);
         Border hexBorder = new Border
         {
             Height = 36,
-            CornerRadius = new CornerRadius(7),
-            BorderThickness = new Thickness(1.5)
+            CornerRadius = new CornerRadius(6),
+            BorderThickness = new Thickness(1)
         };
         hexBorder.SetResourceReference(Border.BackgroundProperty, "TranscriptBrush");
-        hexBorder.SetResourceReference(Border.BorderBrushProperty, "FrameSoftBrush");
+        hexBorder.SetResourceReference(Border.BorderBrushProperty, "HairlineStrongBrush");
         _hex = new TextBox
         {
             Background = Brushes.Transparent,
@@ -129,7 +129,7 @@ internal sealed class HudColorWell : UserControl
         };
         _hex.SetResourceReference(Control.ForegroundProperty, "TextBrush");
         _hex.SetResourceReference(System.Windows.Controls.Primitives.TextBoxBase.CaretBrushProperty, "TextBrush");
-        _hex.SetResourceReference(Control.FontFamilyProperty, "UiFont");
+        _hex.SetResourceReference(Control.FontFamilyProperty, "TranscriptFont");
         _hex.LostFocus += (_, _) => CommitHex();
         _hex.PreviewKeyDown += (_, args) =>
         {
